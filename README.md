@@ -38,8 +38,15 @@ Whether you use **Cursor**, **Claude Code**, **Antigravity IDE**, **Windsurf**, 
 Run this single command in your terminal:
 
 ```bash
+# Recommended (Official PyPI package)
 pip install karjimut
 ```
+
+*Or install directly from GitHub Releases:*
+```bash
+pip install https://github.com/Arapemula/Karjimut/releases/download/v2.0.1/karjimut-2.0.1-py3-none-any.whl
+```
+
 *(Or run instantly without installation using [uv](https://github.com/astral-sh/uv): `uvx karjimut`)*
 
 ### 2. Connect to Your Favorite AI IDE
