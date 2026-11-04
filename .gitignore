@@ -33,14 +33,14 @@ sleep-mcp/*.exe
 Thumbs.db
 ~$*
 
-# Dokumen & Script Skripsi Pribadi (Strict Ignore)
+# Dokumen & Berkas Privat (Strict Ignore)
 DOC-Skripsi/
 *.docx
 *.bak
 *.pdf
-Master Blueprint Skripsi*.md
+Master Blueprint*.md
 pedoman_penulisan_*.md
-revisi_skripsi_docx.py
+revisi_*.py
 build_revisi_*.py
 eksekusi_revisi_*.py
 sleep-mcp/assets/gambar_2_tahapan_penelitian*.png
