@@ -1,0 +1,4 @@
+# Ignore Dokumen Skripsi Pribadi
+DOC-Skripsi/
+DOC-Skripsi/**
+*.docx

@@ -1,0 +1,63 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.venv/
+venv/
+env/
+
+# Environment & Local Machine Config
+.env
+sleep-mcp/.env
+sleep-mcp/mcp_config_siap_pakai.json
+
+# SQLite Databases & temporary WAL/SHM files
+*.db
+*.sqlite
+*.sqlite3
+*.db-wal
+*.db-shm
+
+# PyInstaller / Build Artifacts
+build/
+dist/
+*.spec
+sleep-mcp/build/
+sleep-mcp/dist/
+sleep-mcp/*.spec
+sleep-mcp/*.exe
+
+# OS / Editor
+.DS_Store
+Thumbs.db
+~$*
+
+# Dokumen & Script Skripsi Pribadi (Strict Ignore)
+DOC-Skripsi/
+*.docx
+*.bak
+*.pdf
+Master Blueprint Skripsi*.md
+pedoman_penulisan_*.md
+revisi_skripsi_docx.py
+build_revisi_*.py
+eksekusi_revisi_*.py
+sleep-mcp/assets/gambar_2_tahapan_penelitian*.png
+
+# Source Code Internal & Test Suite (Closed-Source Distribution)
+sleep-mcp/src/
+sleep-mcp/tests/
+sleep-mcp/run.py
+sleep-mcp/pyproject.toml
+sleep-mcp/requirements.txt
+sleep-mcp/MULAI_DISINI.bat
+sleep-mcp/data/
+sleep-mcp/README.md
+sleep-mcp/*.egg-info/
+*.egg-info/
+
+
+
+
+
