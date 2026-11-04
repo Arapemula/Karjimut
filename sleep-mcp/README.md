@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="sleep-mcp/assets/karjimut_banner.png" alt="Karjimut Banner" width="720" style="border-radius: 16px;" />
+  <img src="https://raw.githubusercontent.com/Arapemula/Karjimut/main/sleep-mcp/assets/karjimut_banner.png" alt="Karjimut Banner" width="720" style="border-radius: 16px;" />
 </p>
 
 <h1 align="center">Karjimut</h1>
@@ -32,7 +32,7 @@ Whether you use **Cursor**, **Claude Code**, **Antigravity IDE**, **Windsurf**, 
 
 ---
 
-## ⚡ Quick Start (Ready in 60 Seconds)
+## ⚡ Quick Start (Ready in 30 Seconds)
 
 ### 1. Install Karjimut
 Run this single command in your terminal:
@@ -42,31 +42,21 @@ Run this single command in your terminal:
 pip install karjimut
 ```
 
-*Or install directly from GitHub Releases:*
+*(Or run instantly without installation using [uv](https://github.com/astral-sh/uv): `uvx karjimut setup`)*
+
+### 2. Auto-Setup All Your IDEs (Zero Manual Steps)
+Run:
+
 ```bash
-pip install https://github.com/Arapemula/Karjimut/releases/download/v2.0.2/karjimut-2.0.2-py3-none-any.whl
+karjimut setup
 ```
 
-*(Or run instantly without installation using [uv](https://github.com/astral-sh/uv): `uvx karjimut`)*
+Karjimut automatically detects installed IDEs (**Cursor**, **Claude Desktop**, **Windsurf**, **Antigravity / Gemini CLI**, and **VS Code Cline/Roo Code**) and safely injects:
+- ✅ MCP server configuration directly into each IDE's configuration file.
+- ✅ Global Autonomous Rules (`karjimut.mdc` & `sleep-mcp-auto.md`) so you don't have to copy-paste `.cursorrules` to every new project folder!
 
-### 2. Connect to Your Favorite AI IDE
-Add Karjimut to your IDE's MCP configuration (`mcp_config.json` in Cursor, Antigravity, Claude Desktop, or Windsurf):
-
-```json
-{
-  "mcpServers": {
-    "karjimut": {
-      "command": "karjimut",
-      "args": ["mcp"]
-    }
-  }
-}
-```
-
-### 3. Drop in the Vibecoder Rule
-Copy [`.cursorrules`](.cursorrules) (for Cursor/Windsurf) or [`GEMINI.md`](GEMINI.md) (for Antigravity) into the root of your project workspace.
-
-**That's it!** Your AI agent will now autonomously retain memory, recall bug fixes, and synchronize with your team without you ever having to micro-manage it.
+### 3. Open Your IDE & Start Vibecoding
+Open your project in Cursor, Claude Desktop, or your preferred IDE. Your AI coding agent will now autonomously retain project identity, prevent amnesia, and recall solutions without any manual intervention.
 
 ---
 
@@ -79,7 +69,7 @@ karjimut
 ```
 
 <p align="center">
-  <img src="sleep-mcp/assets/karjimut_logo.png" alt="Karjimut Desktop App" width="120" />
+  <img src="https://raw.githubusercontent.com/Arapemula/Karjimut/main/sleep-mcp/assets/karjimut_logo.png" alt="Karjimut Desktop App" width="120" />
 </p>
 
 Karjimut includes a modern, high-performance desktop application built with CustomTkinter:
