@@ -12,7 +12,7 @@
 <p align="center">
   <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/Python-3.10%2B-blue.svg" alt="Python 3.10+"></a>
   <a href="https://modelcontextprotocol.io/"><img src="https://img.shields.io/badge/MCP-1.2.0%2B-green.svg" alt="MCP Spec"></a>
-  <a href="https://github.com/Arapemula/Karjimut/releases"><img src="https://img.shields.io/badge/Release-v2.0.0-brightgreen.svg" alt="Release v2.0.0"></a>
+  <a href="https://pypi.org/project/karjimut/"><img src="https://img.shields.io/pypi/v/karjimut.svg?color=blue" alt="PyPI Version"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
   <a href="https://github.com/Arapemula/Karjimut"><img src="https://img.shields.io/badge/PRs-Welcome-orange.svg" alt="PRs Welcome"></a>
 </p>
@@ -38,12 +38,9 @@ Whether you use **Cursor**, **Claude Code**, **Antigravity IDE**, **Windsurf**, 
 Run this single command in your terminal:
 
 ```bash
-pip install https://github.com/Arapemula/Karjimut/releases/download/Karjimut/karjimut-2.0.0-py3-none-any.whl
-```
-*Or*
-```bash
 pip install karjimut
 ```
+*(Or run instantly without installation using [uv](https://github.com/astral-sh/uv): `uvx karjimut`)*
 
 ### 2. Connect to Your Favorite AI IDE
 Add Karjimut to your IDE's MCP configuration (`mcp_config.json` in Cursor, Antigravity, Claude Desktop, or Windsurf):
