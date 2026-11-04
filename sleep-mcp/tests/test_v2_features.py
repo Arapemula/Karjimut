@@ -501,3 +501,39 @@ def test_bilingual_synonym_search_and_code_safe_splitter(temp_v2_db: str):
         hasil = cari_solusi_fts_conn(conn, "bilingual-app", "database connection locked", limit=2)
         assert len(hasil) == 1
         assert hasil[0]["id"] == 301
+
+
+# ---------------------------------------------------------------------------
+# 14. Test Zero-Setup Auto-Injector MCP Config
+# ---------------------------------------------------------------------------
+def test_zero_setup_auto_injector_mcp_config(tmp_path):
+    """Memverifikasi injeksi otomatis konfigurasi MCP JSON secara aman tanpa merusak server lain."""
+    import json
+    from src.run import _get_mcp_server_config, _inject_mcp_into_json
+
+    cfg_file = tmp_path / "mock_ide_config.json"
+    server_cfg = _get_mcp_server_config()
+    assert "command" in server_cfg
+    assert "args" in server_cfg
+
+    # Injeksi ke file baru
+    sukses = _inject_mcp_into_json(cfg_file, server_cfg)
+    assert sukses is True
+    assert cfg_file.exists()
+
+    data = json.loads(cfg_file.read_text(encoding="utf-8"))
+    assert "mcpServers" in data
+    assert "karjimut" in data["mcpServers"]
+    assert data["mcpServers"]["karjimut"]["command"] == server_cfg["command"]
+
+    # Injeksi kedua dengan server lain yang sudah ada sebelumnya
+    data["mcpServers"]["existing_tool"] = {"command": "node", "args": ["index.js"]}
+    cfg_file.write_text(json.dumps(data, indent=2), encoding="utf-8")
+
+    sukses_2 = _inject_mcp_into_json(cfg_file, server_cfg)
+    assert sukses_2 is True
+    data_2 = json.loads(cfg_file.read_text(encoding="utf-8"))
+    assert "karjimut" in data_2["mcpServers"]
+    assert "existing_tool" in data_2["mcpServers"]
+    assert data_2["mcpServers"]["existing_tool"]["command"] == "node"
+

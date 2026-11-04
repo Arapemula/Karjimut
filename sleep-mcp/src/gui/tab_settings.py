@@ -392,6 +392,18 @@ class SettingsTabMixin:
             command=self._salin_json_mcp,
         ).pack(side="left")
 
+        ctk.CTkButton(
+            ide_actions,
+            text="🚀 Pasang Otomatis ke Semua IDE",
+            fg_color=BRAND_DARK,
+            hover_color=BRAND_DARK_HOVER,
+            text_color="#FFFFFF",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            corner_radius=9,
+            height=30,
+            command=self._auto_inject_ide_dari_gui,
+        ).pack(side="left", padx=(8, 0))
+
         self.lbl_mcp_info_mode = ctk.CTkLabel(
             ide_card,
             text="💡 Mode Portabel: menggunakan perintah 'python' dari PATH sistem (konfigurasi standar & portabel tanpa path username laptop pribadi).",
@@ -670,3 +682,25 @@ class SettingsTabMixin:
             text="📋 Konfigurasi JSON MCP berhasil disalin ke Clipboard!",
             text_color=PILL_SUCCESS_FG,
         )
+
+    def _auto_inject_ide_dari_gui(self) -> None:
+        try:
+            try:
+                from ..run import auto_inject_mcp_ke_semua_ide
+            except ImportError:
+                from src.run import auto_inject_mcp_ke_semua_ide
+
+            hasil = auto_inject_mcp_ke_semua_ide(verbose=False)
+            if hasil:
+                pesan = f"🚀 Berhasil disuntikkan ke {len(hasil)} IDE (Cursor, Claude, Windsurf, dll)!"
+                self.lbl_footer.configure(text=pesan, text_color=PILL_SUCCESS_FG)
+            else:
+                self.lbl_footer.configure(
+                    text="⚠️ Tidak ada IDE desktop yang terdeteksi otomatis. Silakan salin JSON manual.",
+                    text_color=PILL_WARN_FG,
+                )
+        except Exception as exc:
+            self.lbl_footer.configure(
+                text=f"❌ Gagal menyuntikkan ke IDE: {exc}",
+                text_color=PILL_DANGER_FG,
+            )

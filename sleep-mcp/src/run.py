@@ -26,8 +26,19 @@ from pathlib import Path
 # Amankan stdout/stderr jika diluncurkan melalui pythonw.exe atau .exe windowed (tanpa console)
 if sys.stdout is None:
     sys.stdout = open(os.devnull, "w", encoding="utf-8")  # noqa: SIM115
+elif hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 if sys.stderr is None:
     sys.stderr = open(os.devnull, "w", encoding="utf-8")  # noqa: SIM115
+elif hasattr(sys.stderr, "reconfigure"):
+    try:
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
 
 IS_FROZEN = bool(getattr(sys, "frozen", False))
 _HERE = Path(__file__).resolve().parent
@@ -268,40 +279,162 @@ def build_standalone_exe() -> int:
     return rc
 
 
-def tampilkan_setup_ide(target_dir: str | None = None) -> None:
-    """Menyiapkan konfigurasi JSON MCP siap tempel & menyalin Bootstrap Rules ke proyek target."""
-    pastikan_lingkungan_siap(auto_install=False)
-    pasang_aturan_otomatis_global(verbose=True, pasang_global=True)
-    cwd_path = ROOT_DIR.resolve().as_posix()
+def _get_mcp_server_config() -> dict[str, object]:
+    """Mengembalikan konfigurasi JSON server Karjimut yang paling andal untuk platform saat ini."""
+    if shutil.which("karjimut"):
+        return {
+            "command": "karjimut",
+            "args": ["mcp"],
+        }
+    py_exe = _get_console_python()
+    if IS_INSTALLED_PACKAGE:
+        return {
+            "command": py_exe,
+            "args": ["-m", "karjimut", "mcp"],
+        }
+    run_script = (ROOT_DIR / "run.py").resolve().as_posix()
+    return {
+        "command": py_exe,
+        "args": [run_script, "mcp"],
+    }
 
-    if IS_INSTALLED_PACKAGE or shutil.which("karjimut"):
-        mcp_json: dict[str, object] = {
-            "mcpServers": {
-                "karjimut": {
-                    "command": "karjimut",
-                    "args": ["mcp"],
-                }
-            }
-        }
-    else:
-        mcp_json = {
-            "mcpServers": {
-                "karjimut": {
-                    "command": "python",
-                    "args": ["run.py", "mcp"],
-                    "cwd": cwd_path,
-                }
-            }
-        }
+
+def _inject_mcp_into_json(config_path: Path, server_config: dict[str, object], server_name: str = "karjimut") -> bool:
+    """Menyuntikkan konfigurasi server MCP ke file JSON target tanpa merusak konfigurasi lain."""
+    try:
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+        data: dict[str, object] = {}
+        if config_path.exists():
+            try:
+                data = json.loads(config_path.read_text(encoding="utf-8"))
+            except Exception:
+                data = {}
+        if not isinstance(data, dict):
+            data = {}
+
+        mcp_servers = data.get("mcpServers")
+        if not isinstance(mcp_servers, dict):
+            mcp_servers = {}
+            data["mcpServers"] = mcp_servers
+
+        mcp_servers[server_name] = server_config
+        config_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        return True
+    except Exception:
+        return False
+
+
+def auto_inject_mcp_ke_semua_ide(verbose: bool = True) -> list[str]:
+    """Mendeteksi otomatis seluruh IDE yang terpasang dan menyuntikkan konfigurasi MCP + Global Rules.
+    
+    Target yang didukung:
+      1. Claude Desktop (Windows, macOS, Linux)
+      2. Cursor (Global MCP ~/.cursor/mcp.json & Global Rules ~/.cursor/rules/karjimut.mdc)
+      3. Windsurf (~/.codeium/windsurf/mcp_config.json)
+      4. Antigravity / Gemini CLI (~/.gemini/config/rules/ & ~/.gemini/GEMINI.md)
+      5. VS Code Cline & Roo Code (globalStorage mcp settings)
+    """
+    server_cfg = _get_mcp_server_config()
+    terinjeksi: list[str] = []
+    home = Path.home()
+    appdata = Path(os.environ.get("APPDATA", home / "AppData" / "Roaming"))
+
+    # 1. Claude Desktop
+    claude_candidates = [
+        appdata / "Claude" / "claude_desktop_config.json",  # Windows
+        home / "Library" / "Application Support" / "Claude" / "claude_desktop_config.json",  # macOS
+        home / ".config" / "Claude" / "claude_desktop_config.json",  # Linux
+    ]
+    for cp in claude_candidates:
+        if cp.parent.exists() or cp.exists():
+            if _inject_mcp_into_json(cp, server_cfg):
+                terinjeksi.append(f"Claude Desktop ({cp})")
+                if verbose:
+                    print(f"  [Auto-Inject] [OK] Claude Desktop: {cp}")
+            break
+
+    # 2. Cursor (Global MCP & Global Rules)
+    cursor_mcp = home / ".cursor" / "mcp.json"
+    if _inject_mcp_into_json(cursor_mcp, server_cfg):
+        rule_md_src = RULES_TEMPLATE_DIR / "antigravity_rules.md"
+        if rule_md_src.exists():
+            isi_rule = rule_md_src.read_text(encoding="utf-8")
+            cursor_rule_dir = home / ".cursor" / "rules"
+            _tulis_jika_berubah(cursor_rule_dir / "karjimut.mdc", isi_rule)
+        terinjeksi.append(f"Cursor ({cursor_mcp})")
+        if verbose:
+            print(f"  [Auto-Inject] [OK] Cursor (Global MCP & Rules): {cursor_mcp}")
+
+    # 3. Windsurf
+    windsurf_cfg = home / ".codeium" / "windsurf" / "mcp_config.json"
+    if windsurf_cfg.parent.exists() or windsurf_cfg.exists():
+        if _inject_mcp_into_json(windsurf_cfg, server_cfg):
+            terinjeksi.append(f"Windsurf ({windsurf_cfg})")
+            if verbose:
+                print(f"  [Auto-Inject] [OK] Windsurf: {windsurf_cfg}")
+
+    # 4. Antigravity / Gemini CLI
+    gemini_home = home / ".gemini"
+    rule_md_src = RULES_TEMPLATE_DIR / "antigravity_rules.md"
+    if gemini_home.exists() and rule_md_src.exists():
+        try:
+            isi_rule = rule_md_src.read_text(encoding="utf-8")
+            isi_gemini_md = isi_rule
+            if isi_gemini_md.startswith("---"):
+                bagian = isi_gemini_md.split("---", 2)
+                if len(bagian) == 3:
+                    isi_gemini_md = bagian[2].lstrip()
+            _tulis_jika_berubah(gemini_home / "config" / "rules" / "sleep-mcp-auto.md", isi_rule)
+            global_gemini_md = gemini_home / "GEMINI.md"
+            if not global_gemini_md.exists() or "karjimut" not in global_gemini_md.read_text(encoding="utf-8", errors="ignore").lower():
+                existing = global_gemini_md.read_text(encoding="utf-8", errors="ignore").strip() if global_gemini_md.exists() else ""
+                gabungan = (existing + "\n\n" + isi_gemini_md).strip() + "\n" if existing else isi_gemini_md
+                _tulis_jika_berubah(global_gemini_md, gabungan)
+            terinjeksi.append(f"Antigravity/Gemini ({gemini_home})")
+            if verbose:
+                print(f"  [Auto-Inject] [OK] Antigravity / Gemini CLI: {gemini_home}")
+        except Exception:
+            pass
+
+    # 5. VS Code Extensions (Cline & Roo Code)
+    vscode_exts = [
+        ("VS Code Cline", appdata / "Code" / "User" / "globalStorage" / "saoudrizwan.claude-dev" / "settings" / "cline_mcp_settings.json"),
+        ("VS Code Cline (macOS)", home / "Library" / "Application Support" / "Code" / "User" / "globalStorage" / "saoudrizwan.claude-dev" / "settings" / "cline_mcp_settings.json"),
+        ("VS Code Roo Code", appdata / "Code" / "User" / "globalStorage" / "rooveterinaryinc.roo-cline" / "settings" / "cline_mcp_settings.json"),
+        ("VS Code Roo Code (macOS)", home / "Library" / "Application Support" / "Code" / "User" / "globalStorage" / "rooveterinaryinc.roo-cline" / "settings" / "cline_mcp_settings.json"),
+    ]
+    for label, vpath in vscode_exts:
+        if vpath.parent.exists() or vpath.exists():
+            if _inject_mcp_into_json(vpath, server_cfg):
+                terinjeksi.append(f"{label} ({vpath})")
+                if verbose:
+                    print(f"  [Auto-Inject] [OK] {label}: {vpath}")
+
+    return terinjeksi
+
+
+def tampilkan_setup_ide(target_dir: str | None = None) -> None:
+    """Menyiapkan konfigurasi JSON MCP siap tempel, auto-inject ke seluruh IDE, & menyalin Rules."""
+    pastikan_lingkungan_siap(auto_install=False)
+    pasang_aturan_otomatis_global(verbose=False, pasang_global=True)
+    mcp_json = {"mcpServers": {"karjimut": _get_mcp_server_config()}}
 
     config_out = ROOT_DIR / "mcp_config_siap_pakai.json"
     config_out.write_text(json.dumps(mcp_json, indent=2), encoding="utf-8")
 
     print("\n" + "=" * 72)
-    print("  KONFIGURASI OTOMATIS MCP (ANTIGRAVITY / CURSOR / CLAUDE DESKTOP)")
+    print("  KARJIMUT ZERO-SETUP AUTO-INJECTOR (IDE & AGENTS)")
     print("=" * 72)
-    print(f"File konfigurasi telah disimpan ke: {config_out}\n")
-    print(json.dumps(mcp_json, indent=2))
+    print("Mendeteksi lingkungan IDE dan menyuntikkan MCP & Aturan Otomatis...\n")
+    terinjeksi = auto_inject_mcp_ke_semua_ide(verbose=True)
+    print("-" * 72)
+    if terinjeksi:
+        print(f"[Sukses] Karjimut otomatis terkonfigurasi di {len(terinjeksi)} lingkungan:")
+        for nama in terinjeksi:
+            print(f"   * {nama}")
+    else:
+        print("[Info] Tidak ada IDE desktop yang terdeteksi otomatis. File mcp_config_siap_pakai.json dibuat.")
+    print(f"\nSalinan mcp_config_siap_pakai.json tersimpan di:\n  {config_out}")
     print("=" * 72)
 
     if target_dir:
@@ -325,7 +458,7 @@ def menu_interaktif() -> None:
         print("  [1] Jalankan Aplikasi Desktop Native (CustomTkinter + Idle Watcher)")
         print("  [2] Jalankan Unit & Integration Test (Pytest)")
         print("  [3] Jalankan Simulasi Benchmark Efisiensi & Retensi Token")
-        print("  [4] Buat Konfigurasi Otomatis MCP IDE (mcp_config_siap_pakai.json)")
+        print("  [4] Auto-Setup Semua IDE & Generator Config MCP (Cursor, Claude, dll)")
         print("  [5] Build Aplikasi Mandiri Karjimut.exe (PyInstaller)")
         print("  [0] Keluar")
         print("=" * 68)
@@ -359,7 +492,7 @@ def main() -> None:
     parser.add_argument(
         "aksi",
         nargs="?",
-        choices=["gui", "menu", "test", "benchmark", "mcp", "setup-ide", "build-exe"],
+        choices=["gui", "menu", "test", "benchmark", "mcp", "setup", "setup-ide", "build-exe"],
         default="gui",
         help="Aksi yang ingin dijalankan (default: gui / Aplikasi Desktop CustomTkinter)",
     )
@@ -374,7 +507,7 @@ def main() -> None:
         sys.exit(jalankan_simulasi_skenario())
     elif args.aksi == "mcp":
         jalankan_mcp_server()
-    elif args.aksi == "setup-ide":
+    elif args.aksi in ("setup", "setup-ide"):
         tampilkan_setup_ide(target_dir=args.target_dir)
     elif args.aksi == "build-exe":
         sys.exit(build_standalone_exe())
