@@ -38,7 +38,6 @@ Whether you use **Cursor**, **Claude Code**, **Antigravity IDE**, **Windsurf**, 
 Run this single command in your terminal:
 
 ```bash
-# Recommended (Official PyPI package)
 pip install karjimut
 ```
 
