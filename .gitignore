@@ -34,16 +34,15 @@ Thumbs.db
 ~$*
 
 # Dokumen & Berkas Privat (Strict Ignore)
-DOC-Skripsi/
+docs-private/
+DOC-*/
 *.docx
 *.bak
 *.pdf
-Master Blueprint*.md
-pedoman_penulisan_*.md
-revisi_*.py
-build_revisi_*.py
-eksekusi_revisi_*.py
-sleep-mcp/assets/gambar_2_tahapan_penelitian*.png
+*Blueprint*.md
+pedoman_*.md
+*revisi*.py
+*eksekusi*.py
 
 # Source Code Internal & Test Suite (Closed-Source Distribution)
 sleep-mcp/src/

@@ -1,4 +1,6 @@
 # Dokumen & Berkas Privat (Strict Ignore)
-DOC-Skripsi/
-DOC-Skripsi/**
+docs-private/
+DOC-*/
 *.docx
+*.bak
+*.pdf
