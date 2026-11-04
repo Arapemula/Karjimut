@@ -1,105 +1,53 @@
 <p align="center">
-  <img src="sleep-mcp/assets/karjimut_banner.png" alt="Karjimut Logo" width="680" style="border-radius: 16px;" />
+  <img src="sleep-mcp/assets/karjimut_banner.png" alt="Karjimut Banner" width="720" style="border-radius: 16px;" />
 </p>
 
-<h1 align="center">Karjimut </h1>
+<h1 align="center">Karjimut</h1>
 
 <p align="center">
-  <strong>Arsitektur Memori Dua Lapis Berbasis Model Context Protocol (MCP) dengan Konsolidasi Fase Idle, Elastic Core, dan Sinkronisasi Multi-Tim untuk Efisiensi Token Lintas Agentic AI</strong>
+  <strong>The Autonomous Long-Term Memory Engine for AI Coding Agents</strong><br>
+  <em>Stop LLM Amnesia. Cut Token Costs by up to 90%. Keep Cursor, Claude Code, and Antigravity Aligned Forever.</em>
 </p>
 
 <p align="center">
   <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/Python-3.10%2B-blue.svg" alt="Python 3.10+"></a>
   <a href="https://modelcontextprotocol.io/"><img src="https://img.shields.io/badge/MCP-1.2.0%2B-green.svg" alt="MCP Spec"></a>
-  <a href="https://sqlite.org/wal.html"><img src="https://img.shields.io/badge/SQLite-WAL%20%2B%20FTS5%20BM25-orange.svg" alt="SQLite WAL"></a>
-  <a href="https://github.com/Arapemula/Karjimut"><img src="https://img.shields.io/badge/Tests-26%2F26%20Passed-brightgreen.svg" alt="Tests 26/26 Passed"></a>
+  <a href="https://github.com/Arapemula/Karjimut/releases"><img src="https://img.shields.io/badge/Release-v2.0.0-brightgreen.svg" alt="Release v2.0.0"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
+  <a href="https://github.com/Arapemula/Karjimut"><img src="https://img.shields.io/badge/PRs-Welcome-orange.svg" alt="PRs Welcome"></a>
 </p>
 
 <p align="center">
-  Dikembangkan oleh <strong>Naufal Arhab Fadhil Muhammad</strong>
+  Crafted with care by <strong>Naufal Arhab Fadhil Muhammad</strong>
 </p>
 
 ---
 
-## 🌟 Mengapa Karjimut?
+## 💡 The Problem with Modern AI Coding Agents
 
-Autonomous AI Coding Agent modern (*Antigravity IDE*, *Cursor*, *Claude Code*, *Cline*, *Windsurf*) menderita tiga masalah struktural ketika mengerjakan proyek perangkat lunak jangka panjang:
-1. **Pembengkakan Context Window ($O(N)$)**: Seluruh riwayat percakapan dan log *trial-and-error* terus ditumpuk hingga melampaui batas token dan menguras kuota API.
-2. **Context Rot & Amnesia Lintas Sesi**: Saat sesi baru dibuka atau *context compaction* terjadi, agen lupa aturan arsitektur inti dan mengulangi *bug* yang sama.
-3. **Isolasi Memori Antar-Developer**: Memori lokal agen di satu komputer tidak terdistribusi ke rekan satu tim.
+Whether you use **Cursor**, **Claude Code**, **Antigravity IDE**, **Windsurf**, or **Cline**, long-term projects always hit three painful walls:
 
-**Karjimut** menyelesaikan ketiganya melalui **Arsitektur Memori Dua Lapis Berbasis Model Context Protocol (MCP)** yang dikombinasikan dengan **Konsolidasi Fase Idle (*7-Step Sleep Cycle*)** — terinspirasi dari konsolidasi memori biologis manusia saat tidur.
+1. 💸 **Context Window Bloat & Cost Explosions**: As sessions grow, raw conversation logs and messy trial-and-error traces accumulate, burning millions of tokens and draining your API budget.
+2. 🧠 **Context Rot & Session Amnesia**: Start a fresh session or let compaction trigger, and your agent instantly forgets your core architecture rules, directory structure, and repeats the exact same bugs it spent two hours solving yesterday.
+3. 🏝️ **Developer Memory Isolation**: Your AI agent's hard-won discoveries on your machine remain trapped locally—your teammates' agents will step on the exact same landmines.
 
----
-
-## 🧠 Arsitektur Memori Dua Lapis (v2.0)
-
-| Lapisan Memori | Kapasitas Token | Karakteristik & Peran | Primitif MCP |
-| :--- | :--- | :--- | :--- |
-| **Lapis 1: KTP Proyek**<br>(*Elastic Core Project Identity*) | **Elastic Core** (`KTP_MAX_TOKENS=0` default: fleksibel mengikuti skala proyek; atau opsional batas keras $\le 150$ token) | Menyimpan identitas aplikasi, *tech stack*, struktur direktori inti, dan aturan arsitektur wajib yang selalu terkompresi tanpa duplikasi ($O(1)$ per sesi). | **Tool:** `baca_ktp_proyek(kode_proyek)`<br>**Resource:** `karjimut://{kode_proyek}/ktp` |
-| **Lapis 2: Laci Arsip Solusi**<br>(*On-Demand Solution Vault*) | **0 Token di awal sesi**<br>(Hanya diambil saat dibutuhkan) | Menyimpan intisari solusi paten atas *error* teknis/*bug*, dilengkapi *multi-tag* gejala, *1-hop causal graph*, dan bobot *confidence score*. | **Tool:** `cari_laci_solusi(kode_proyek, kata_kunci)` |
-
-Selama sesi koding berlangsung, agen AI mencatat setiap *milestone* secara asinkron ($< 10\text{ ms}$) menggunakan tool `titip_catatan_kerja(kode_proyek, ringkasan_aksi)` ke dalam `antrean_mentah`. Saat pengguna tidak aktif ($\ge 5$ menit), **Idle Watcher** memicu **Sleep Cycle** di latar belakang tanpa mengganggu alur kerja.
+**Karjimut** solves all three permanently through a **Two-Tier Bio-Inspired Memory Architecture** powered by the **Model Context Protocol (MCP)** and **Autonomous Idle-Phase Consolidation (Sleep Cycle)**.
 
 ---
 
-## 🚀 Fitur Unggulan Karjimut v2.0
+## ⚡ Quick Start (Ready in 60 Seconds)
 
-- **⚡ Elastic Core Mode (`KTP_MAX_TOKENS=0`)**: Memori Lapis 1 (KTP Proyek) tidak lagi dipotong paksa pada proyek berskala besar, namun tetap dirangkum secara padat oleh *Sleep Cycle* agar bebas dari polusi log mentah. Tetap mendukung mode batas keras ($\le 150$ token) bila dikonfigurasi.
-- **🤝 Multi-Team Git Sync (`.karjimut/team_memory.jsonl`)**: Menyinkronkan KTP Proyek dan solusi *bug* paten lintas anggota tim melalui format JSON Lines yang ramah `git merge` — bebas konflik file biner SQLite! Mendukung *backward compatibility* otomatis dengan folder `.sleep-mcp/`.
-- **🧹 Self-Cleaning Memory & Confidence Decay**: Solusi lama yang usang otomatis ditandai dengan `supersedes_id` saat arsitektur berubah, sementara solusi yang sering berhasil dipakai mendapat kenaikan `confidence_score` pada perankingan pencarian.
-- **🕸️ 1-Hop Causal Graph (Relasi Lapis 1 $\leftrightarrow$ Lapis 2)**: Setiap aturan di KTP Proyek dapat menautkan referensi langsung (`[Solusi #ID]`) ke solusi teknis di Laci Arsip.
-- **🔍 Hybrid Search Dwibahasa (FTS5 Okapi BM25 + Vector ONNX RRF)**: Menggabungkan pencarian leksikal eksak kode error (`SQLITE_BUSY`, `#nextjs-15`) dengan pencarian semantik *multilingual* (`paraphrase-multilingual-MiniLM-L12-v2` via *FastEmbed* ONNX CPU) menggunakan *Reciprocal Rank Fusion* (RRF).
-- **🖥️ Aplikasi Desktop Native (CustomTkinter)**: Dilengkapi *1-Column Auto-Detect API Key Wizard* (mendukung Google Gemini, Groq, OpenRouter, Anthropic Claude, OpenAI, hingga mode 100% *Offline Rule-Based Distiller*), editor KTP Proyek dengan *1-Click Rollback*, CRUD Laci Solusi, dan Dashboard Metrik Penghematan Token (Metrik A & Metrik B).
+### 1. Install Karjimut
+Run this single command in your terminal:
 
----
-
-## 📂 Struktur Repositori Distribusi
-
-```text
-Karjimut/
-|-- README.md                       # Dokumentasi utama & panduan Quick Start
-|-- GEMINI.md                       # Aturan Otomatis Tiga Mandat (Antigravity IDE)
-|-- .cursorrules                    # Aturan Otomatis Tiga Mandat (Cursor IDE)
-|-- .agents/rules/sleep-mcp-auto.md # Aturan Otomatis Workspace Agent
-|-- sleep-mcp/
-    |-- assets/                     # Banner resmi, logo maskot, dan ikon desktop (.ico)
-    |   |-- karjimut_banner.png
-    |   |-- karjimut_logo.png
-    |   |-- karjimut.ico
-    |-- rules_template/             # Template Bootstrap Rules untuk proyek baru
-        |-- .cursorrules            # Template aturan otomatis untuk Cursor
-        |-- antigravity_rules.md    # Template aturan otomatis untuk Antigravity
-```
-
-> **Catatan Distribusi:**
-> Seluruh mesin inti Karjimut (*FastMCP Server*, *CustomTkinter Native Desktop GUI*, *SQLite WAL FTS5 + Hybrid Search*, dan *7-Step Sleep Cycle*) didistribusikan secara terkompilasi melalui paket Python di PyPI (`pip install karjimut` atau `uvx karjimut`).
-
----
-
-## ⚡ Cara Menjalankan (Quick Start)
-
-### 1. Instalasi Instan via Package Manager (Rekomendasi)
 ```bash
-pip install karjimut
+pip install https://github.com/Arapemula/Karjimut/releases/download/Karjimut/karjimut-2.0.0-py3-none-any.whl
 ```
-Atau jalankan langsung tanpa instalasi manual menggunakan **`uvx`**:
-```bash
-uvx karjimut
-```
+*(Or install via PyPI once published: `pip install karjimut`)*
 
-### 2. Membuka Aplikasi Desktop Native (CustomTkinter)
-Cukup ketik perintah berikut di terminal:
-```bash
-karjimut
-```
-Aplikasi GUI Karjimut akan langsung terbuka dengan panduan wizard setup API Key otomatis.
+### 2. Connect to Your Favorite AI IDE
+Add Karjimut to your IDE's MCP configuration (`mcp_config.json` in Cursor, Antigravity, Claude Desktop, or Windsurf):
 
-### 3. Konfigurasi MCP Server di IDE (Cursor / Antigravity / Claude Desktop)
-Cukup tambahkan konfigurasi berikut ke file `mcp_config.json` di IDE Anda:
-
-**Opsi A (Via Perintah Global `karjimut`):**
 ```json
 {
   "mcpServers": {
@@ -111,44 +59,88 @@ Cukup tambahkan konfigurasi berikut ke file `mcp_config.json` di IDE Anda:
 }
 ```
 
-**Opsi B (Zero-Install via `uvx`):**
-```json
-{
-  "mcpServers": {
-    "karjimut": {
-      "command": "uvx",
-      "args": ["karjimut", "mcp"]
-    }
-  }
-}
+### 3. Drop in the Vibecoder Rule
+Copy [`.cursorrules`](.cursorrules) (for Cursor/Windsurf) or [`GEMINI.md`](GEMINI.md) (for Antigravity) into the root of your project workspace.
+
+**That's it!** Your AI agent will now autonomously retain memory, recall bug fixes, and synchronize with your team without you ever having to micro-manage it.
+
+---
+
+## 🖥️ Native Desktop Dashboard
+
+Prefer a visual control center? Simply open your terminal and type:
+
+```bash
+karjimut
 ```
-*(MCP Server dan background Idle Watcher akan otomatis aktif bersamaan).*
+
+<p align="center">
+  <img src="sleep-mcp/assets/karjimut_logo.png" alt="Karjimut Desktop App" width="120" />
+</p>
+
+Karjimut includes a modern, high-performance desktop application built with CustomTkinter:
+- **1-Column Smart Onboarding**: Automatically detects your API keys (Google Gemini, Groq, OpenRouter, Claude, OpenAI) or operates in 100% offline rule-based mode.
+- **Elastic Core Editor**: View and fine-tune your project's active identity and mandatory rules, complete with a 1-click rollback mechanism.
+- **Proven Solution Vault**: Search, curate, and review distilled bug resolutions.
+- **Real-Time Sustainability Analytics**: Live tracking of token savings, raw vs. compressed token efficiency, and AI retention metrics.
 
 ---
 
-## 🤖 Tiga Mandat Otomatis (Mode Vibecoder Zero-Prompt)
+## 🚀 Key Features
 
-Dengan memasang file `GEMINI.md` atau `.cursorrules` di root proyek, AI Agent akan menjalankan siklus memori **100% otomatis di balik layar** tanpa perlu diperintah manual oleh pengguna:
-1. **Mandat 1 — Inisialisasi Awal Sesi**: Otomatis memanggil `baca_ktp_proyek(kode_proyek, path_workspace)` pada giliran pertama sesi baru (sekaligus mengimpor `.karjimut/team_memory.jsonl` terbaru dari Git).
-2. **Mandat 2 — Pencatatan Milestone Otomatis**: Otomatis memanggil `titip_catatan_kerja(kode_proyek, ringkasan_aksi, path_workspace)` setiap selesai membangun fitur atau memperbaiki *bug*.
-3. **Mandat 3 — Pencarian Solusi Saat Error**: Otomatis memanggil `cari_laci_solusi(kode_proyek, kata_kunci, path_workspace)` saat menemui *error* terminal sebelum mencoba *trial-and-error*.
+### 🧠 Two-Tier Bio-Inspired Memory
+* **Tier 1: Elastic Project Core (Lapis 1)**: Holds your tech stack, core directory layout, and non-negotiable architecture rules. Always compressed, deduplicated, and instant ($O(1)$ overhead at session start).
+* **Tier 2: On-Demand Solution Vault (Lapis 2)**: Zero token cost during normal coding! Solutions to tricky bugs are retrieved on-demand only when a matching error or stack trace occurs.
+
+### 🌙 Autonomous Sleep Cycle (Idle Consolidation)
+During coding sessions, your agent leaves lightweight milestone notes in an asynchronous queue. When you take a coffee break ($\ge 5$ minutes of inactivity), Karjimut's background daemon activates the **Sleep Cycle**—distilling raw logs, updating core rules, and archiving proven solutions into persistent memory.
+
+### 🤝 Multi-Team Git Synchronization
+Karjimut serializes project memory into clean, git-friendly `.karjimut/team_memory.jsonl` files. When you push and pull via Git, your entire team's AI agents automatically inherit everyone's bug fixes and updated rules—completely free of binary database merge conflicts.
+
+### 🔍 High-Precision Hybrid Search
+Combines lexical keyword matching (for exact error codes like `SQLITE_BUSY` or `#nextjs-15`) with multilingual semantic embeddings (`paraphrase-multilingual-MiniLM-L12-v2` via CPU-accelerated ONNX) using Reciprocal Rank Fusion (RRF).
+
+### 🤖 100% Autonomous (Zero-Prompt Vibecoder Protocol)
+You don't need to remind your AI agent to use Karjimut. With the workspace rules attached, the agent operates autonomously:
+1. **At Session Start**: Automatically fetches the latest Project Core and imports any new team memory.
+2. **During Coding**: Automatically checkpoints progress and technical rules after completing features.
+3. **When Errors Strike**: Automatically searches the Solution Vault for a one-shot fix before wasting tokens on hallucinated trial-and-error.
 
 ---
 
-## 🧪 Verifikasi & Pengujian (26 Automated Unit Tests)
+## 📂 Repository Structure
 
-Seluruh komponen diuji menggunakan `pytest` (26 kasus uji: `UT-01` s.d. `UT-26`):
-- **`UT-01` s.d. `UT-09`**: SQLite WAL Mode, Trigger FTS5 otomatis, pencarian BM25 dengan simbol `#`/`-`, *Stale Lock Sweeper* ($>180\text{s}$), *Hard-Limit Enforcement*, *1-Step Rollback*, Deduplikasi Jaccard ($\ge 0.5$), *Offline Rule-Based Distiller*, dan konkurensi *multi-thread* bebas `SQLITE_BUSY`.
-- **`UT-10` s.d. `UT-21`**: Resolusi `path_workspace`, *rename/merge* proyek dengan `alias_proyek`, proteksi anti-IDOR lintas proyek, *Cross-Process File Lock*, *Auto-Detect API Key* 6 provider, *Self-Healing Model Selector*, lokalisasi ID/EN (`i18n`), dan pencarian hibrida vektor ONNX + BM25 (RRF).
-- **`UT-22` s.d. `UT-26` (Fitur Karjimut v2.0)**:
-  - `UT-22`: *Elastic Core Mode* (`max_tokens=0`) mempertahankan seluruh aturan proyek besar tanpa pemotongan paksa.
-  - `UT-23`: *1-Hop Causal Graph Links* menautkan referensi `[Solusi #ID]` dari KTP Proyek ke Laci Arsip.
-  - `UT-24`: *Self-Cleaning Memory* (`supersedes_id`) mendeprekasi solusi usang saat arsitektur diperbarui.
-  - `UT-25`: *Multi-Team Git Sync* mengekspor dan mengimpor `.karjimut/team_memory.jsonl` lintas komputer secara idempoten.
-  - `UT-26`: *Confidence Score Weighting* memprioritaskan solusi dengan histori keberhasilan tertinggi.
+```text
+Karjimut/
+|-- README.md                       # Official product documentation & Quick Start
+|-- GEMINI.md                       # Autonomous Vibecoder Rule (Antigravity IDE)
+|-- .cursorrules                    # Autonomous Vibecoder Rule (Cursor & Windsurf)
+|-- .agents/rules/sleep-mcp-auto.md # Universal Agent Bootstrap Rule
+|-- sleep-mcp/
+    |-- assets/                     # Official brand logos, banners, and app icons
+    |   |-- karjimut_banner.png
+    |   |-- karjimut_logo.png
+    |   |-- karjimut.ico
+    |-- rules_template/             # Starter templates for new workspaces
+        |-- .cursorrules
+        |-- antigravity_rules.md
+```
+
+> **Distribution Architecture:**  
+> Karjimut is engineered as a high-performance, standalone package. The core engine (MCP server, native GUI, SQLite WAL vector store, and background watcher) is delivered directly via verified binary packages.
 
 ---
 
-## 📄 Lisensi
+## 🛡️ Privacy & Local-First Philosophy
 
-Hak Cipta © 2026 **Naufal Arhab Fadhil Muhammad**. Dilisensikan di bawah [MIT License](LICENSE).
+- **Zero Telemetry**: Karjimut does not track your keystrokes, projects, or personal data.
+- **Local Storage**: All databases, cache, and vector embeddings reside locally on your machine in SQLite WAL mode.
+- **Your Keys, Your Choice**: Use your own API keys, run local Ollama models, or utilize the 100% offline rule-based distiller.
+
+---
+
+## 📄 License
+
+Karjimut is open-source software licensed under the **[MIT License](LICENSE)**.  
+Copyright © 2026 **Naufal Arhab Fadhil Muhammad**. All rights reserved.
