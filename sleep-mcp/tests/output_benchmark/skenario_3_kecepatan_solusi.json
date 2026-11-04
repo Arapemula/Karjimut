@@ -1,0 +1,80 @@
+{
+  "kode_proyek": "skripsi-fts5-accuracy-test",
+  "kasus_solusi": [
+    {
+      "no": 1,
+      "nama_bug": "CORS Origin Blocked",
+      "query_input": "Access to fetch at 'http://localhost:8000' fr...",
+      "baseline_steps": 4,
+      "baseline_time": "42.5s",
+      "mcp_steps": 1,
+      "mcp_time": "0.0923s",
+      "speedup": "460.5x",
+      "top3_match": "VALID (Top-1)",
+      "skor_bm25": -3.152564,
+      "metode": "FTS5_BM25"
+    },
+    {
+      "no": 2,
+      "nama_bug": "Database Pool Timeout",
+      "query_input": "QueuePool limit of size 5 overflow 10 reached...",
+      "baseline_steps": 5,
+      "baseline_time": "58.0s",
+      "mcp_steps": 1,
+      "mcp_time": "0.0552s",
+      "speedup": "1050.7x",
+      "top3_match": "VALID (Top-1)",
+      "skor_bm25": -8.441527,
+      "metode": "FTS5_BM25"
+    },
+    {
+      "no": 3,
+      "nama_bug": "JWT Token Expired",
+      "query_input": "HTTP 401 Unauthorized Signature has expired d...",
+      "baseline_steps": 3,
+      "baseline_time": "31.0s",
+      "mcp_steps": 1,
+      "mcp_time": "0.0415s",
+      "speedup": "747.0x",
+      "top3_match": "VALID (Top-1)",
+      "skor_bm25": -8.92839,
+      "metode": "FTS5_BM25"
+    },
+    {
+      "no": 4,
+      "nama_bug": "Alembic Multiple Heads",
+      "query_input": "Multiple head revisions are present in alembi...",
+      "baseline_steps": 4,
+      "baseline_time": "45.0s",
+      "mcp_steps": 1,
+      "mcp_time": "0.0462s",
+      "speedup": "974.0x",
+      "top3_match": "VALID (Top-1)",
+      "skor_bm25": -5.277277,
+      "metode": "FTS5_BM25"
+    },
+    {
+      "no": 5,
+      "nama_bug": "Redis Connection Refused",
+      "query_input": "Error 111 connecting to 127.0.0.1:6379 Connec...",
+      "baseline_steps": 3,
+      "baseline_time": "28.5s",
+      "mcp_steps": 1,
+      "mcp_time": "0.0715s",
+      "speedup": "398.6x",
+      "top3_match": "VALID (Top-1)",
+      "skor_bm25": -10.609489,
+      "metode": "FTS5_BM25"
+    }
+  ],
+  "top3_akurasi_persen": 100.0,
+  "precision_at_1_persen": 100.0,
+  "mrr_score": 1.0,
+  "out_of_domain_rejection_persen": 100.0,
+  "total_kasus": 5,
+  "top3_berhasil": 5,
+  "total_baris_arsip": 5,
+  "duplikasi_baris": 0,
+  "rata2_baseline_steps": 3.8,
+  "rata2_mcp_steps": 1.0
+}

@@ -1,0 +1,43 @@
+{
+  "kode_proyek": "skripsi-rule-retention-test",
+  "token_ktp_sesi_1": 115,
+  "token_ktp_sesi_2": 122,
+  "token_ktp_sesi_3": 122,
+  "hard_limit_terpenuhi": true,
+  "aturan_evaluasi": [
+    {
+      "no": 1,
+      "aturan": "Wajib menggunakan connection pool PostgreSQL dengan library asyncpg.",
+      "kata_kunci_verifikasi": "'asyncpg' / 'connection pool'",
+      "status": "TERPATUHI (100% Retained)"
+    },
+    {
+      "no": 2,
+      "aturan": "Dilarang menggunakan raw SQL query tanpa parameterized binding untuk cegah SQL injection.",
+      "kata_kunci_verifikasi": "'parameterized' / 'sql injection'",
+      "status": "TERPATUHI (100% Retained)"
+    },
+    {
+      "no": 3,
+      "aturan": "Wajib validasi seluruh skema request dan response menggunakan Pydantic v2.",
+      "kata_kunci_verifikasi": "'pydantic' / 'skema'",
+      "status": "TERPATUHI (100% Retained)"
+    },
+    {
+      "no": 4,
+      "aturan": "Endpoint API wajib menerapkan rate limiting maksimal 100 request per menit.",
+      "kata_kunci_verifikasi": "'rate limit' / '100'",
+      "status": "TERPATUHI (100% Retained)"
+    },
+    {
+      "no": 5,
+      "aturan": "Wajib menyertakan header correlation-id pada setiap logging format JSON.",
+      "kata_kunci_verifikasi": "'correlation-id' / 'json'",
+      "status": "TERPATUHI (100% Retained)"
+    }
+  ],
+  "aturan_terpenuhi": 5,
+  "total_aturan": 5,
+  "rule_retention_rate": 100.0,
+  "ktp_final": "[KTP Proyek: skripsi-rule-retention-test | Versi: 2 | Token: 122 (Elastic) | Update: 2026-11-04 18:55:42]\nProyek skripsi-rule-retention-test. Stack: Redis, Celery. Aturan: (1) Wajib menggunakan connection pool PostgreSQL dengan library asyncpg; (2) Dilarang menggunakan raw SQL query tanpa parameterized binding untuk cegah SQL injection; (3) Wajib validasi seluruh skema request dan response menggunakan Pydantic v2; (4) Endpoint API wajib menerapkan rate limiting maksimal 100 request per menit; (5) Wajib menyertakan header correlation-id pada setiap logging format JSON."
+}

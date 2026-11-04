@@ -1,0 +1,6 @@
+No,Nama Bug,Query Gejala,Baseline Steps,Baseline Waktu,MCP Steps,MCP Waktu,Speedup,Akurasi Top-3,Skor BM25
+1,CORS Origin Blocked,Access to fetch at 'http://localhost:8000' fr...,4,42.5s,1,0.0923s,460.5x,VALID (Top-1),-3.152564
+2,Database Pool Timeout,QueuePool limit of size 5 overflow 10 reached...,5,58.0s,1,0.0552s,1050.7x,VALID (Top-1),-8.441527
+3,JWT Token Expired,HTTP 401 Unauthorized Signature has expired d...,3,31.0s,1,0.0415s,747.0x,VALID (Top-1),-8.92839
+4,Alembic Multiple Heads,Multiple head revisions are present in alembi...,4,45.0s,1,0.0462s,974.0x,VALID (Top-1),-5.277277
+5,Redis Connection Refused,Error 111 connecting to 127.0.0.1:6379 Connec...,3,28.5s,1,0.0715s,398.6x,VALID (Top-1),-10.609489

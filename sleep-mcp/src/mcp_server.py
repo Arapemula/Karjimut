@@ -1,0 +1,522 @@
+"""Server FastMCP Karjimut: 4 MCP Tools utama (+3 alias ramah pengguna) + MCP Resource pasif.
+
+Primitif MCP:
+1. Tool `baca_ktp_proyek(kode_proyek: str) -> str`
+   - Inisialisasi awal sesi: mengambil KTP Proyek (Lapis 1, Elastic Core).
+   - Menghitung token mentah setara dan mencatat metrik ke `log_metrik_token`.
+2. Resource Pasif `mcp://karjimut/ktp/{kode_proyek}` (serta alias `mcp://sleep-mcp/ktp/{kode_proyek}`)
+   - Menyediakan isi KTP Proyek untuk klien yang mendukung resource auto-attachment.
+3. Tool `titip_catatan_kerja(kode_proyek: str, ringkasan_aksi: str) -> str`
+   - Pencatatan milestone aksi kerja ke `antrean_mentah` secara cepat (non-blocking).
+4. Tool `cari_laci_solusi(kode_proyek: str, kata_kunci: str) -> str`
+   - Pencarian on-demand solusi paten (Lapis 2) via Hybrid Search (BM25 + Vector RRF).
+"""
+
+from __future__ import annotations
+
+import argparse
+import sys
+from typing import Any
+
+from mcp.server.fastmcp import FastMCP
+
+from .config import (
+    AKTIVITAS_READ_KTP,
+    AKTIVITAS_SEARCH_SOLUSI,
+    AKTIVITAS_WRITE_LOG,
+    STATUS_PENDING,
+    STATUS_PROCESSED,
+    get_settings,
+    setup_logging,
+)
+from .consolidator import (
+    _RE_PROMPT_BREAKOUT,
+    _RE_PROMPT_INJECTION,
+    auto_bootstrap_workspace,
+    impor_memori_tim,
+    perbarui_log_pembelajaran,
+)
+from .db import (
+    catat_metrik,
+    koneksi,
+    normalisasi_kode_proyek,
+    pastikan_db,
+    resolve_proyek,
+    transaksi,
+)
+from .fts_search import cari_solusi_fts_conn
+from .idle_watcher import IdleWatcherDaemon
+from .tokenizer_utils import hitung_token
+
+logger = setup_logging("sleep_mcp.server")
+
+# Inisialisasi FastMCP Server
+mcp = FastMCP(
+    "Karjimut",
+    instructions=(
+        "Karjimut — Arsitektur Memori Dua Lapis Otomatis & Pembelajaran Mandiri (Self-Learning Memory Engine via Model Context Protocol). "
+        "ATURAN UTAMA: JANGAN PERNAH menunggu perintah user untuk memanggil tool Karjimut. "
+        "Gunakan nama folder workspace aktif saat ini (format slug/kebab-case huruf kecil, misal 'toko-online' atau 'backend-api') sebagai parameter `kode_proyek`. "
+        "1) Panggil `baca_core_proyek` (atau `baca_ktp_proyek`) secara OTOMATIS di awal sesi koding baru. "
+        "2) Panggil `simpan_catatan_kerja` (atau `titip_catatan_kerja`) secara OTOMATIS setiap selesai membuat fitur, mengedit kode, atau memperbaiki bug. "
+        "3) Panggil `cari_solusi` (atau `cari_laci_solusi`) secara OTOMATIS setiap kali menemui error terminal atau exception. "
+        "4) Panggil `nilai_solusi` setelah mencoba solusi (berhasil=True jika berhasil, False jika gagal) sebagai feedback loop pembelajaran mandiri."
+    ),
+)
+
+
+# Global background watcher jika diaktifkan via embedded mode
+_embedded_watcher: IdleWatcherDaemon | None = None
+
+# Batas keamanan ukuran input MCP Tool (mencegah Resource Exhaustion / Denial of Wallet)
+MAX_LOG_CHARS = 8000
+MAX_QUERY_CHARS = 500
+MAX_ESTIMASI_TOKEN = 50000
+
+
+# ---------------------------------------------------------------------------
+# 1. MCP Tool: baca_ktp_proyek
+# ---------------------------------------------------------------------------
+@mcp.tool(
+    name="baca_ktp_proyek",
+    description=(
+        "WAJIB DIPANGGIL OTOMATIS TANPA DISURUH USER pada awal sesi baru sebelum mulai menulis/mengubah kode. "
+        "Mengambil KTP Proyek (Lapis 1, Elastic Core) yang berisi identitas proyek, tech stack, struktur direktori inti, "
+        "dan aturan wajib. Gunakan nama folder workspace aktif saat ini (huruf kecil kebab-case) sebagai `kode_proyek` "
+        "dan (disarankan) path absolut folder workspace sebagai `path_workspace`."
+    ),
+)
+def baca_ktp_proyek(kode_proyek: str, path_workspace: str | None = None) -> str:
+    """Mengambil KTP Proyek terbaru dan mencatat metrik penghematan token ke log_metrik_token."""
+    settings = get_settings()
+    try:
+        normalisasi_kode_proyek(kode_proyek)
+    except ValueError as exc:
+        return f"[Karjimut] Parameter kode_proyek tidak valid: {exc}"
+
+    with koneksi(settings.db_path) as conn:
+        with transaksi(conn):
+            kode = resolve_proyek(conn, kode_proyek, path_workspace)
+            if path_workspace:
+                impor_memori_tim(conn, kode, path_workspace)
+
+            ktp_row = conn.execute(
+                """
+                SELECT ringkasan_inti, jumlah_token, versi_ktp, waktu_update
+                FROM ktp_proyek
+                WHERE kode_proyek = ?
+                """,
+                (kode,),
+            ).fetchone()
+
+            if ktp_row is None and path_workspace:
+                auto_bootstrap_workspace(conn, kode, path_workspace)
+                ktp_row = conn.execute(
+                    """
+                    SELECT ringkasan_inti, jumlah_token, versi_ktp, waktu_update
+                    FROM ktp_proyek
+                    WHERE kode_proyek = ?
+                    """,
+                    (kode,),
+                ).fetchone()
+
+            # Hitung total token mentah setara dari log yang sudah berstatus processed
+            token_mentah_row = conn.execute(
+                """
+                SELECT COALESCE(SUM(estimasi_token_mentah), 0) AS total_mentah
+                FROM antrean_mentah
+                WHERE kode_proyek = ? AND status_rangkum = ?
+                """,
+                (kode, STATUS_PROCESSED),
+            ).fetchone()
+            token_mentah_setara = int(token_mentah_row["total_mentah"] if token_mentah_row else 0)
+
+            total_pending_row = conn.execute(
+                "SELECT COUNT(*) AS jml FROM antrean_mentah WHERE kode_proyek = ? AND status_rangkum = ?",
+                (kode, STATUS_PENDING),
+            ).fetchone()
+            total_pending = int(total_pending_row["jml"] if total_pending_row else 0)
+
+            pending_rows = conn.execute(
+                """
+                SELECT id, isi_log
+                FROM antrean_mentah
+                WHERE kode_proyek = ? AND status_rangkum = ?
+                ORDER BY id DESC
+                LIMIT 2
+                """,
+                (kode, STATUS_PENDING),
+            ).fetchall()
+
+            if ktp_row is None:
+                respons = (
+                    f"[KTP Proyek '{kode}': Baru Diinisialisasi]\n"
+                    f"Belum ada memori terangkum untuk proyek '{kode}'. "
+                    f"Silakan kerjakan tugas Anda dan catat milestone dengan titip_catatan_kerja()."
+                )
+            else:
+                info_token = (
+                    f"{ktp_row['jumlah_token']} (Elastic)"
+                    if settings.ktp_max_tokens <= 0
+                    else f"{ktp_row['jumlah_token']}/{settings.ktp_max_tokens}"
+                )
+                respons = (
+                    f"[KTP Proyek: {kode} | Versi: {ktp_row['versi_ktp']} | "
+                    f"Token: {info_token} | Update: {ktp_row['waktu_update']}]\n"
+                    f"{ktp_row['ringkasan_inti']}"
+                )
+                if pending_rows:
+                    cuplikan = "; ".join(
+                        f"#{r['id']}: {str(r['isi_log']).splitlines()[0][:100]}" for r in pending_rows
+                    )
+                    respons += f"\n[Hot-Buffer Pending ({total_pending} catatan): {cuplikan}]"
+            token_aktual = hitung_token(respons)
+
+            catat_metrik(
+                conn,
+                kode_proyek=kode,
+                jenis_aktivitas=AKTIVITAS_READ_KTP,
+                token_mentah_setara=token_mentah_setara,
+                token_aktual_terpakai=token_aktual,
+            )
+
+    return respons
+
+
+# ---------------------------------------------------------------------------
+# 2. MCP Resource Pasif: mcp://karjimut/ktp/{kode_proyek} (+ alias sleep-mcp)
+# ---------------------------------------------------------------------------
+@mcp.resource(
+    "mcp://karjimut/ktp/{kode_proyek}",
+    name="karjimut_ktp_proyek_resource",
+    description="Resource pasif KTP Proyek Karjimut untuk auto-attachment pada klien MCP yang mendukung.",
+    mime_type="text/plain",
+)
+@mcp.resource(
+    "mcp://sleep-mcp/ktp/{kode_proyek}",
+    name="ktp_proyek_resource",
+    description="Resource pasif KTP Proyek untuk auto-attachment pada klien MCP yang mendukung.",
+    mime_type="text/plain",
+)
+def resource_ktp_proyek(kode_proyek: str) -> str:
+    """Mengembalikan teks KTP Proyek secara pasif tanpa mencatat metrik sesi aktif."""
+    settings = get_settings()
+    kode = normalisasi_kode_proyek(kode_proyek)
+
+    with koneksi(settings.db_path) as conn:
+        kode = resolve_proyek(conn, kode)
+        row = conn.execute(
+            "SELECT ringkasan_inti FROM ktp_proyek WHERE kode_proyek = ?", (kode,)
+        ).fetchone()
+
+    if row is None:
+        return f"Proyek '{kode}' belum memiliki KTP terdaftar."
+    return str(row["ringkasan_inti"])
+
+
+# ---------------------------------------------------------------------------
+# 3. MCP Tool: titip_catatan_kerja
+# ---------------------------------------------------------------------------
+@mcp.tool(
+    name="titip_catatan_kerja",
+    description=(
+        "WAJIB DIPANGGIL OTOMATIS TANPA DISURUH USER setiap kali kamu selesai membuat fitur, mengedit kode, "
+        "mengubah skema/konfigurasi, atau memperbaiki bug. Menyimpan ringkasan aksi ke antrean mentah Karjimut "
+        "untuk dikonsolidasi otomatis pada fase idle. Gunakan nama folder workspace aktif saat ini sebagai `kode_proyek` "
+        "dan (disarankan) path absolut folder workspace sebagai `path_workspace` agar memori tidak tertukar saat folder "
+        "di-rename atau ada dua folder bernama sama. "
+        "FORMAT RINGKASAN (agar memori proyek akurat): tulis dalam bahasa Indonesia, padat, dan bila relevan gunakan "
+        "penanda berikut: 'Identitas: <fungsi proyek dalam 1 kalimat>. Stack: <teknologi>. Struktur: <direktori inti>. "
+        "Aturan: <aturan wajib baru>. Solusi: <solusi bug yang BERHASIL, maks 2 kalimat> #tag-gejala #tag-kedua'. "
+        "Jangan menempelkan stack trace penuh; cukup nama error dan solusi akhirnya."
+    ),
+)
+def titip_catatan_kerja(
+    kode_proyek: str,
+    ringkasan_aksi: str,
+    estimasi_token_mentah: int | None = None,
+    path_workspace: str | None = None,
+) -> str:
+    """Menerima ringkasan aksi kerja, menghitung estimasi token mentah, dan menyimpan ke antrean."""
+    settings = get_settings()
+    try:
+        normalisasi_kode_proyek(kode_proyek)
+    except ValueError as exc:
+        return f"[Karjimut] Parameter kode_proyek tidak valid: {exc}"
+
+    isi_log = (ringkasan_aksi or "").replace("\x00", "").strip()
+    if not isi_log:
+        return "[Karjimut] Ringkasan aksi tidak boleh kosong."
+    if len(isi_log) > MAX_LOG_CHARS:
+        isi_log = isi_log[:MAX_LOG_CHARS]
+    isi_log = _RE_PROMPT_BREAKOUT.sub(r"(\1)", isi_log)
+    baris_aman = [b for b in isi_log.splitlines() if not _RE_PROMPT_INJECTION.search(b)]
+    isi_log = "\n".join(baris_aman).strip()
+    if not isi_log:
+        return "[Karjimut] Ringkasan aksi ditolak karena terdeteksi mengandung instruksi manipulatif (prompt injection)."
+
+    estimasi_token = hitung_token(isi_log)
+    if estimasi_token_mentah is not None:
+        try:
+            nilai_mentah = min(int(estimasi_token_mentah), MAX_ESTIMASI_TOKEN)
+            if nilai_mentah > estimasi_token:
+                estimasi_token = nilai_mentah
+        except (TypeError, ValueError):
+            pass
+
+    with koneksi(settings.db_path) as conn:
+        with transaksi(conn):
+            kode = resolve_proyek(conn, kode_proyek, path_workspace)
+            cur = conn.execute(
+                """
+                INSERT INTO antrean_mentah (kode_proyek, isi_log, estimasi_token_mentah, status_rangkum)
+                VALUES (?, ?, ?, 0)
+                """,
+                (kode, isi_log, estimasi_token),
+            )
+            log_id = cur.lastrowid
+
+            konfirmasi = (
+                f"[Karjimut] Milestone tersimpan di antrean mentah (Log #{log_id}, ~{estimasi_token} token). "
+                f"Akan dikonsolidasi otomatis pada fase idle berikutnya."
+            )
+            token_konfirmasi = hitung_token(konfirmasi)
+
+            catat_metrik(
+                conn,
+                kode_proyek=kode,
+                jenis_aktivitas=AKTIVITAS_WRITE_LOG,
+                token_mentah_setara=estimasi_token,
+                token_aktual_terpakai=token_konfirmasi,
+            )
+
+    return konfirmasi
+
+
+# ---------------------------------------------------------------------------
+# 4. MCP Tool: cari_laci_solusi
+# ---------------------------------------------------------------------------
+@mcp.tool(
+    name="cari_laci_solusi",
+    description=(
+        "WAJIB DIPANGGIL OTOMATIS TANPA DISURUH USER setiap kali kamu menemui error terminal, kegagalan build/test, "
+        "atau stack trace exception. Mencari solusi konkret di Laci Arsip (Lapis 2) berbasis SQLite FTS5 BM25 "
+        "sebelum melakukan trial-and-error mandiri. Gunakan nama folder workspace aktif saat ini sebagai `kode_proyek` "
+        "dan (disarankan) path absolut folder workspace sebagai `path_workspace`."
+    ),
+)
+def cari_laci_solusi(kode_proyek: str, kata_kunci: str, path_workspace: str | None = None) -> str:
+    """Mencari solusi paten relevan di Laci Arsip menggunakan FTS5 BM25 (maks. 3 hasil)."""
+    settings = get_settings()
+    try:
+        normalisasi_kode_proyek(kode_proyek)
+    except ValueError as exc:
+        return f"[Karjimut Laci Solusi] Parameter kode_proyek tidak valid: {exc}"
+
+    query = (kata_kunci or "").replace("\x00", "").strip()[:MAX_QUERY_CHARS]
+    if not query:
+        return "[Karjimut Laci Solusi] Kata kunci pencarian kosong."
+
+    with koneksi(settings.db_path) as conn:
+        with transaksi(conn):
+            kode = resolve_proyek(conn, kode_proyek, path_workspace)
+        hasil = cari_solusi_fts_conn(conn, kode_proyek=kode, kata_kunci=query, limit=3)
+
+        if not hasil:
+            respons = (
+                f"[Karjimut Laci Solusi: '{kode}'] Tidak ditemukan solusi relevan untuk kata kunci: '{query}'. "
+                f"Silakan investigasi mandiri dan titipkan solusinya setelah berhasil."
+            )
+        else:
+            baris_hasil: list[str] = [
+                f"[Karjimut Laci Solusi: '{kode}' | Ditemukan {len(hasil)} solusi relevan]"
+            ]
+            for idx, item in enumerate(hasil, 1):
+                info_parts = []
+                if item.get("skor_bm25") is not None:
+                    info_parts.append(f"BM25: {item['skor_bm25']}")
+                if item.get("skor_jarak_vektor") is not None:
+                    info_parts.append(f"VecDist: {item['skor_jarak_vektor']}")
+                if item.get("skor_rrf") is not None:
+                    info_parts.append(f"RRF: {item['skor_rrf']}")
+                conf_val = item.get("confidence", 0.7)
+                info_parts.append(f"Conf: {conf_val}")
+                skor_info = f" | {', '.join(info_parts)}" if info_parts else ""
+                baris_hasil.append(
+                    f"{idx}. [ID #{item['id']} | {item['tag_masalah']}{skor_info}]\n"
+                    f"   Solusi: {item['solusi_paten']}"
+                )
+            respons = "\n".join(baris_hasil)
+
+        token_aktual = hitung_token(respons)
+
+        with transaksi(conn):
+            catat_metrik(
+                conn,
+                kode_proyek=kode,
+                jenis_aktivitas=AKTIVITAS_SEARCH_SOLUSI,
+                token_mentah_setara=0,
+                token_aktual_terpakai=token_aktual,
+            )
+
+    return respons
+
+
+# ---------------------------------------------------------------------------
+# 5. MCP Tool: nilai_solusi (Feedback Loop Pembelajaran Mandiri)
+# ---------------------------------------------------------------------------
+@mcp.tool(
+    name="nilai_solusi",
+    description=(
+        "Memberikan umpan balik (feedback loop) pembelajaran mandiri pada solusi di Laci Arsip (Lapis 2). "
+        "Panggil tool ini setelah mencoba solusi dari `cari_solusi` / `cari_laci_solusi` dengan parameter `berhasil=True` "
+        "jika error teratasi, atau `berhasil=False` jika solusi tersebut gagal. "
+        "Tindakan ini akan menaikkan/menurunkan confidence score solusi dan memperbarui metrik self-assessment."
+    ),
+)
+def nilai_solusi(
+    kode_proyek: str,
+    id_solusi: int,
+    berhasil: bool,
+    catatan: str | None = None,
+    path_workspace: str | None = None,
+) -> str:
+    """Feedback loop untuk evaluasi solusi: menaikkan/menurunkan confidence dan mencatat hit/miss."""
+    settings = get_settings()
+    try:
+        normalisasi_kode_proyek(kode_proyek)
+    except ValueError as exc:
+        return f"[Karjimut Feedback] Parameter kode_proyek tidak valid: {exc}"
+
+    with koneksi(settings.db_path) as conn:
+        with transaksi(conn):
+            kode = resolve_proyek(conn, kode_proyek, path_workspace)
+            row = conn.execute(
+                "SELECT id, tag_masalah, solusi_paten, confidence, hit_count, miss_count "
+                "FROM laci_arsip WHERE id = ? AND kode_proyek = ?",
+                (int(id_solusi), kode),
+            ).fetchone()
+            if row is None:
+                return f"[Karjimut Feedback] Solusi #{id_solusi} tidak ditemukan pada proyek '{kode}'."
+
+            conf_lama = float(row["confidence"] if row["confidence"] is not None else 0.7)
+            hit_lama = int(row["hit_count"] or 0)
+            miss_lama = int(row["miss_count"] or 0)
+
+            if berhasil:
+                conf_baru = min(1.0, round(conf_lama + 0.10, 2))
+                hit_baru = hit_lama + 1
+                miss_baru = miss_lama
+                status_teks = "BERHASIL (Confidence meningkat 📈)"
+            else:
+                conf_baru = max(0.1, round(conf_lama - 0.15, 2))
+                hit_baru = hit_lama
+                miss_baru = miss_lama + 1
+                status_teks = "GAGAL (Confidence diturunkan 📉)"
+
+            is_stale_baru = 1 if conf_baru < 0.35 else 0
+
+            conn.execute(
+                """
+                UPDATE laci_arsip
+                SET confidence = ?, hit_count = ?, miss_count = ?, last_hit = CURRENT_TIMESTAMP, is_stale = ?
+                WHERE id = ?
+                """,
+                (conf_baru, hit_baru, miss_baru, is_stale_baru, int(id_solusi)),
+            )
+
+            # Catat snapshot evaluasi terbaru ke log pembelajaran
+            perbarui_log_pembelajaran(conn, kode)
+
+    return (
+        f"[Karjimut Feedback #{id_solusi}] Status: {status_teks} | "
+        f"Confidence: {conf_lama} -> {conf_baru} | Hits: {hit_baru} | Misses: {miss_baru}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# 5. Customer-Friendly MCP Aliases (Core Proyek, Simpan Catatan, Cari Solusi)
+# ---------------------------------------------------------------------------
+@mcp.tool(
+    name="baca_core_proyek",
+    description=(
+        "WAJIB DIPANGGIL OTOMATIS TANPA DISURUH USER di awal sesi koding baru. Mengambil Core Proyek "
+        "(Lapis 1, Elastic Core) yang memuat identitas proyek, stack teknologi, struktur direktori inti, "
+        "dan aturan wajib. Gunakan nama folder workspace aktif sebagai `kode_proyek`."
+    ),
+)
+def baca_core_proyek(kode_proyek: str, path_workspace: str | None = None) -> str:
+    """Customer-friendly alias untuk membaca Core Proyek (Lapis 1)."""
+    return baca_ktp_proyek(kode_proyek=kode_proyek, path_workspace=path_workspace)
+
+
+@mcp.tool(
+    name="simpan_catatan_kerja",
+    description=(
+        "WAJIB DIPANGGIL OTOMATIS TANPA DISURUH USER setiap kali selesai membuat fitur, mengedit kode, "
+        "mengubah konfigurasi, atau memperbaiki bug. Menyimpan ringkasan aksi kerja untuk dikonsolidasi "
+        "otomatis pada fase idle berikutnya. Gunakan nama folder workspace aktif sebagai `kode_proyek`."
+    ),
+)
+def simpan_catatan_kerja(
+    kode_proyek: str,
+    ringkasan_aksi: str,
+    estimasi_token_mentah: int | None = None,
+    path_workspace: str | None = None,
+) -> str:
+    """Customer-friendly alias untuk menyimpan catatan kerja ke antrean konsolidasi."""
+    return titip_catatan_kerja(
+        kode_proyek=kode_proyek,
+        ringkasan_aksi=ringkasan_aksi,
+        estimasi_token_mentah=estimasi_token_mentah,
+        path_workspace=path_workspace,
+    )
+
+
+@mcp.tool(
+    name="cari_solusi",
+    description=(
+        "WAJIB DIPANGGIL OTOMATIS TANPA DISURUH USER setiap kali menemui error terminal, kegagalan build/test, "
+        "atau exception. Mencari solusi paten di Bank Solusi (Lapis 2) berbasis SQLite FTS5 BM25. "
+        "Gunakan nama folder workspace aktif sebagai `kode_proyek`."
+    ),
+)
+def cari_solusi(kode_proyek: str, kata_kunci: str, path_workspace: str | None = None) -> str:
+    """Customer-friendly alias untuk mencari solusi paten di Bank Solusi."""
+    return cari_laci_solusi(
+        kode_proyek=kode_proyek,
+        kata_kunci=kata_kunci,
+        path_workspace=path_workspace,
+    )
+
+
+def start_server(transport: str = "stdio") -> None:
+    """Menjalankan server FastMCP."""
+    settings = get_settings()
+    pastikan_db(settings.db_path)
+
+    global _embedded_watcher
+    if settings.embedded_watcher_mcp:
+        _embedded_watcher = IdleWatcherDaemon(db_path=settings.db_path)
+        _embedded_watcher.start(daemon=True)
+        logger.info("Embedded IdleWatcher berjalan di background.")
+
+    logger.info("Memulai Karjimut FastMCP server (transport=%s)...", transport)
+    mcp.run(transport=transport)
+
+
+def main() -> None:
+    """CLI runner untuk server MCP."""
+    parser = argparse.ArgumentParser(description="Karjimut MCP Server")
+    parser.add_argument(
+        "--transport",
+        choices=["stdio", "sse"],
+        default="stdio",
+        help="Transport protokol MCP (default: stdio)",
+    )
+    args = parser.parse_args()
+    start_server(transport=args.transport)
+
+
+if __name__ == "__main__":
+    main()

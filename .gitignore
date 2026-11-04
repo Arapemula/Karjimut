@@ -18,6 +18,7 @@ sleep-mcp/mcp_config_siap_pakai.json
 *.sqlite3
 *.db-wal
 *.db-shm
+sleep-mcp/data/
 
 # PyInstaller / Build Artifacts
 build/
@@ -27,6 +28,8 @@ sleep-mcp/build/
 sleep-mcp/dist/
 sleep-mcp/*.spec
 sleep-mcp/*.exe
+sleep-mcp/*.egg-info/
+*.egg-info/
 
 # OS / Editor
 .DS_Store
@@ -43,20 +46,4 @@ DOC-*/
 pedoman_*.md
 *revisi*.py
 *eksekusi*.py
-
-# Source Code Internal & Test Suite (Closed-Source Distribution)
-sleep-mcp/src/
-sleep-mcp/tests/
-sleep-mcp/run.py
-sleep-mcp/pyproject.toml
-sleep-mcp/requirements.txt
 sleep-mcp/MULAI_DISINI.bat
-sleep-mcp/data/
-sleep-mcp/README.md
-sleep-mcp/*.egg-info/
-*.egg-info/
-
-
-
-
-

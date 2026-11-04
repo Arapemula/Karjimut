@@ -1,0 +1,6 @@
+No,Aturan Arsitektur,Kata Kunci Verifikasi,Status Retensi
+1,Wajib menggunakan connection pool PostgreSQL dengan library asyncpg.,'asyncpg' / 'connection pool',TERPATUHI (100% Retained)
+2,Dilarang menggunakan raw SQL query tanpa parameterized binding untuk cegah SQL injection.,'parameterized' / 'sql injection',TERPATUHI (100% Retained)
+3,Wajib validasi seluruh skema request dan response menggunakan Pydantic v2.,'pydantic' / 'skema',TERPATUHI (100% Retained)
+4,Endpoint API wajib menerapkan rate limiting maksimal 100 request per menit.,'rate limit' / '100',TERPATUHI (100% Retained)
+5,Wajib menyertakan header correlation-id pada setiap logging format JSON.,'correlation-id' / 'json',TERPATUHI (100% Retained)
