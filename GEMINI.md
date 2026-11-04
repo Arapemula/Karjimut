@@ -26,7 +26,7 @@
 - Jika belum ada di arsip dan kamu berhasil memperbaiki *error* tersebut, wajib catat solusinya melalui `titip_catatan_kerja(kode_proyek, ringkasan_aksi, path_workspace)` agar tersimpan untuk sesi berikutnya.
 
 ## 3. Format Catatan & Identitas Proyek yang Stabil
-- Saat memanggil tool Karjimut, sertakan parameter `path_workspace` berisi **path absolut folder workspace aktif** agar memori terikat akurat ke direktori proyek dan mendukung sinkronisasi tim via `.karjimut/team_memory.jsonl`.
+- Saat memanggil tool Karjimut, sertakan parameter `path_workspace` berisi **path absolut folder workspace aktif** agar memori terikat akurat ke direktori proyek dan mendukung sinkronisasi tim via `.karjimut/team_memory.json`.
 - Tulis `ringkasan_aksi` secara padat. Bila relevan, gunakan penanda terstruktur:
   `Identitas: <fungsi proyek 1 kalimat>. Stack: <teknologi>. Struktur: <direktori inti>. Aturan: <aturan arsitektur baru>. Solusi: <solusi bug yang berhasil, maks 2 kalimat> #tag-gejala #tag-kunci`.
 - Jangan menempelkan *stack trace* penuh; cukup nama *error* dan langkah solusinya.

@@ -43,7 +43,7 @@ pip install karjimut
 
 *Or install directly from GitHub Releases:*
 ```bash
-pip install https://github.com/Arapemula/Karjimut/releases/download/v2.0.1/karjimut-2.0.1-py3-none-any.whl
+pip install https://github.com/Arapemula/Karjimut/releases/download/v2.0.2/karjimut-2.0.2-py3-none-any.whl
 ```
 
 *(Or run instantly without installation using [uv](https://github.com/astral-sh/uv): `uvx karjimut`)*
@@ -99,10 +99,10 @@ Karjimut includes a modern, high-performance desktop application built with Cust
 During coding sessions, your agent leaves lightweight milestone notes in an asynchronous queue. When you take a coffee break ($\ge 5$ minutes of inactivity), Karjimut's background daemon activates the **Sleep Cycle**—distilling raw logs, updating core rules, and archiving proven solutions into persistent memory.
 
 ### 🤝 Multi-Team Git Synchronization
-Karjimut serializes project memory into clean, git-friendly `.karjimut/team_memory.jsonl` files. When you push and pull via Git, your entire team's AI agents automatically inherit everyone's bug fixes and updated rules—completely free of binary database merge conflicts.
+Karjimut serializes project memory into clean, git-friendly `.karjimut/team_memory.json` files. When you push and pull via Git, your entire team's AI agents automatically inherit everyone's bug fixes and updated rules—completely free of binary database merge conflicts.
 
 ### 🔍 High-Precision Hybrid Search
-Combines lexical keyword matching (for exact error codes like `SQLITE_BUSY` or `#nextjs-15`) with multilingual semantic embeddings (`paraphrase-multilingual-MiniLM-L12-v2` via CPU-accelerated ONNX) using Reciprocal Rank Fusion (RRF).
+Combines lexical keyword matching (for exact error codes like `SQLITE_BUSY` or `#nextjs-15`) with 384-dimensional semantic vector embeddings (`BAAI/bge-small-en-v1.5` via CPU-accelerated ONNX + bilingual ID–EN technical synonym expansion & offline feature-hashing fallback) using Reciprocal Rank Fusion (RRF).
 
 ### 🤖 100% Autonomous (Zero-Prompt Vibecoder Protocol)
 You don't need to remind your AI agent to use Karjimut. With the workspace rules attached, the agent operates autonomously:
