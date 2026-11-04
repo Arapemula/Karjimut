@@ -17,9 +17,6 @@
   <a href="https://github.com/Arapemula/Karjimut"><img src="https://img.shields.io/badge/PRs-Welcome-orange.svg" alt="PRs Welcome"></a>
 </p>
 
-<p align="center">
-  Crafted with care by <strong>Naufal Arhab Fadhil Muhammad</strong>
-</p>
 
 ---
 
