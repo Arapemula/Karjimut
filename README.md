@@ -40,7 +40,10 @@ Run this single command in your terminal:
 ```bash
 pip install https://github.com/Arapemula/Karjimut/releases/download/Karjimut/karjimut-2.0.0-py3-none-any.whl
 ```
-*(Or install via PyPI once published: `pip install karjimut`)*
+*Or*
+```bash
+pip install karjimut
+```
 
 ### 2. Connect to Your Favorite AI IDE
 Add Karjimut to your IDE's MCP configuration (`mcp_config.json` in Cursor, Antigravity, Claude Desktop, or Windsurf):
