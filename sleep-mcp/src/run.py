@@ -83,11 +83,7 @@ ENV_EXAMPLE = (
     if (ROOT_DIR / ".env.example").exists()
     else PACKAGE_DIR / ".env.example"
 )
-RULES_TEMPLATE_DIR = (
-    ROOT_DIR / "rules_template"
-    if (ROOT_DIR / "rules_template").exists()
-    else PACKAGE_DIR / "rules_template"
-)
+RULES_TEMPLATE_DIR = PACKAGE_DIR / "rules_template"
 DB_FILE = ROOT_DIR / "data" / "sleep_mcp.db"
 
 REQUIRED_MODULES = ("mcp", "tiktoken", "dotenv", "httpx", "customtkinter")
@@ -514,7 +510,7 @@ def main() -> None:
                 from karjimut import __app_name__, __version__
             except Exception:
                 __app_name__ = "Karjimut"
-                __version__ = "2.0.9"
+                __version__ = "2.0.10"
 
     parser = argparse.ArgumentParser(description="Karjimut One-Step Runner")
     parser.add_argument(
