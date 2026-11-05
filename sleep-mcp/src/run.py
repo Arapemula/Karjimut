@@ -197,6 +197,14 @@ def pastikan_lingkungan_siap(auto_install: bool = True, fast_boot: bool = False)
 
 def jalankan_desktop_gui() -> None:
     """Meluncurkan Aplikasi Desktop Native Karjimut berbasis CustomTkinter."""
+    if sys.platform == "win32":
+        try:
+            import ctypes
+
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("karjimut.desktop.v2")
+        except Exception:
+            pass
+
     pastikan_lingkungan_siap()
     try:
         from .gui.app_gui import start_desktop_app

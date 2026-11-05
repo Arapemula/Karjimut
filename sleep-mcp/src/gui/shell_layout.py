@@ -70,14 +70,30 @@ class ShellLayoutMixin:
     def _pasang_ikon_aplikasi(self) -> None:
         """Memasang ikon jendela aplikasi (.ico / .png) jika tersedia di folder assets."""
         try:
-            candidates = [
-                PROJECT_ROOT / "assets" / "karjimut.ico",
+            candidates_ico = [
                 Path(__file__).resolve().parent.parent / "assets" / "karjimut.ico",
                 Path(__file__).resolve().parent / "assets" / "karjimut.ico",
+                PROJECT_ROOT / "assets" / "karjimut.ico",
             ]
-            for ico_path in candidates:
+            for ico_path in candidates_ico:
                 if ico_path.exists():
                     self.iconbitmap(str(ico_path))
+                    break
+        except Exception:
+            pass
+
+        try:
+            from PIL import Image, ImageTk
+
+            candidates_png = [
+                Path(__file__).resolve().parent.parent / "assets" / "karjimut_logo.png",
+                Path(__file__).resolve().parent / "assets" / "karjimut_logo.png",
+                PROJECT_ROOT / "assets" / "karjimut_logo.png",
+            ]
+            for png_path in candidates_png:
+                if png_path.exists():
+                    self._app_icon_photo = ImageTk.PhotoImage(Image.open(png_path))
+                    self.iconphoto(True, self._app_icon_photo)
                     break
         except Exception:
             pass

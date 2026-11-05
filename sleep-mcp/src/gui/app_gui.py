@@ -13,6 +13,7 @@ Arsitektur Modular GUI (`src/gui/`):
 
 from __future__ import annotations
 
+import sys
 import threading
 from typing import Any
 
@@ -114,6 +115,14 @@ class SleepMCPDesktopApp(
     PAGE_ANTREAN = PAGE_CATATAN
 
     def __init__(self, skip_onboarding: bool = False) -> None:
+        if sys.platform == "win32":
+            try:
+                import ctypes
+
+                ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("karjimut.desktop.v2")
+            except Exception:
+                pass
+
         super().__init__()
 
         muat_preferensi_bahasa_tersimpan()
@@ -546,6 +555,14 @@ KarjimutDesktopApp = SleepMCPDesktopApp
 
 def start_desktop_app(skip_onboarding: bool = False) -> None:
     """Meluncurkan jendela utama Karjimut Desktop Native App."""
+    if sys.platform == "win32":
+        try:
+            import ctypes
+
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("karjimut.desktop.v2")
+        except Exception:
+            pass
+
     app = KarjimutDesktopApp(skip_onboarding=skip_onboarding)
     app.mainloop()
 

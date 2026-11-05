@@ -37,6 +37,7 @@ Thumbs.db
 ~$*
 
 # Dokumen & Berkas Privat (Strict Ignore)
+karjimut-review/
 docs-private/
 DOC-*/
 *.docx
