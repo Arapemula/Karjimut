@@ -504,18 +504,40 @@ def menu_interaktif() -> None:
 
 
 def main() -> None:
+    try:
+        from . import __app_name__, __version__
+    except Exception:
+        try:
+            from src import __app_name__, __version__
+        except Exception:
+            try:
+                from karjimut import __app_name__, __version__
+            except Exception:
+                __app_name__ = "Karjimut"
+                __version__ = "2.0.9"
+
     parser = argparse.ArgumentParser(description="Karjimut One-Step Runner")
+    parser.add_argument(
+        "-v",
+        "--version",
+        action="version",
+        version=f"{__app_name__} v{__version__}",
+        help="Tampilkan versi Karjimut saat ini",
+    )
     parser.add_argument(
         "aksi",
         nargs="?",
-        choices=["gui", "menu", "test", "benchmark", "mcp", "setup", "setup-ide", "build-exe"],
+        choices=["gui", "menu", "test", "benchmark", "mcp", "setup", "setup-ide", "build-exe", "version"],
         default="gui",
         help="Aksi yang ingin dijalankan (default: gui / Aplikasi Desktop CustomTkinter)",
     )
     parser.add_argument("--target-dir", type=str, default=None, help="Folder proyek tujuan untuk menyalin Bootstrap Rules")
     args = parser.parse_args()
 
-    if args.aksi == "gui":
+    if args.aksi == "version":
+        print(f"{__app_name__} v{__version__}")
+        sys.exit(0)
+    elif args.aksi == "gui":
         jalankan_desktop_gui()
     elif args.aksi == "test":
         sys.exit(jalankan_unit_test())
