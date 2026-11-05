@@ -204,7 +204,7 @@ def get_settings() -> Settings:
         llm_provider=_env_str("LLM_PROVIDER", "openai").lower(),
         llm_api_base_url=_env_str("LLM_API_BASE_URL", "https://api.openai.com/v1").rstrip("/"),
         llm_api_key=_env_str("LLM_API_KEY", ""),
-        llm_model_name=_env_str("LLM_MODEL_NAME", "gpt-6-luna"),
+        llm_model_name=_env_str("LLM_MODEL_NAME", "gemini-3.5-flash"),
         llm_timeout_seconds=_env_float("LLM_TIMEOUT_SECONDS", 60.0),
         llm_temperature=_env_float("LLM_TEMPERATURE", 0.1),
         use_local_fallback=_env_bool("USE_LOCAL_FALLBACK", False),

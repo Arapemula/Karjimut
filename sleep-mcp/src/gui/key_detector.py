@@ -31,7 +31,7 @@ MODEL_DEFAULT: dict[str, str] = {
     "groq": "openai/gpt-oss-20b",
     "openrouter": "openrouter/auto",
     "anthropic": "claude-haiku-5-5",
-    "openai": "gpt-6-luna",
+    "openai": "gpt-4o-mini",
 }
 
 
