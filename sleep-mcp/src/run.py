@@ -40,6 +40,14 @@ elif hasattr(sys.stderr, "reconfigure"):
     except Exception:
         pass
 
+if sys.platform == "win32":
+    try:
+        import ctypes
+
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("karjimut.desktop.v2")
+    except Exception:
+        pass
+
 IS_FROZEN = bool(getattr(sys, "frozen", False))
 _HERE = Path(__file__).resolve().parent
 PACKAGE_DIR = _HERE if (_HERE / "config.py").exists() else (_HERE / "src")

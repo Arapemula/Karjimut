@@ -17,6 +17,14 @@ import sys
 import threading
 from typing import Any
 
+if sys.platform == "win32":
+    try:
+        import ctypes
+
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("karjimut.desktop.v2")
+    except Exception:
+        pass
+
 import customtkinter as ctk
 
 from ..config import get_settings, setup_logging
@@ -300,7 +308,7 @@ class SleepMCPDesktopApp(
         if hasattr(self, "btn_tambah_proyek"):
             self.btn_tambah_proyek.configure(text=t("btn_tambah_proyek"))
         if hasattr(self, "btn_gabung_proyek"):
-            self.btn_gabung_proyek.configure(text=t("btn_gabung_proyek"))
+            self.btn_gabung_proyek.configure(text="✏️ " + t("btn_gabung_proyek"))
 
         if hasattr(self, "lbl_kpi_1_title"):
             self.lbl_kpi_1_title.configure(text="🪪 " + t("kpi_core_title"))

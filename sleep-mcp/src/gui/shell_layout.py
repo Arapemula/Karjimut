@@ -69,18 +69,45 @@ class ShellLayoutMixin:
 
     def _pasang_ikon_aplikasi(self) -> None:
         """Memasang ikon jendela aplikasi (.ico / .png) jika tersedia di folder assets."""
-        try:
-            candidates_ico = [
-                Path(__file__).resolve().parent.parent / "assets" / "karjimut.ico",
-                Path(__file__).resolve().parent / "assets" / "karjimut.ico",
-                PROJECT_ROOT / "assets" / "karjimut.ico",
-            ]
-            for ico_path in candidates_ico:
-                if ico_path.exists():
-                    self.iconbitmap(str(ico_path))
-                    break
-        except Exception:
-            pass
+        import sys
+
+        candidates_ico = [
+            Path(__file__).resolve().parent.parent / "assets" / "karjimut.ico",
+            Path(__file__).resolve().parent / "assets" / "karjimut.ico",
+            PROJECT_ROOT / "assets" / "karjimut.ico",
+        ]
+
+        ico_ditemukan: Path | None = None
+        for ico_path in candidates_ico:
+            if ico_path.exists():
+                ico_ditemukan = ico_path
+                break
+
+        if sys.platform == "win32" and ico_ditemukan is not None:
+            try:
+                self.iconbitmap(default=str(ico_ditemukan))
+            except Exception:
+                try:
+                    self.iconbitmap(str(ico_ditemukan))
+                except Exception:
+                    pass
+
+            try:
+                import ctypes
+
+                self.update_idletasks()
+                hwnd = ctypes.windll.user32.GetParent(self.winfo_id()) or self.winfo_id()
+                IMAGE_ICON = 1
+                LR_LOADFROMFILE = 0x00000010
+                hicon_big = ctypes.windll.user32.LoadImageW(None, str(ico_ditemukan), IMAGE_ICON, 32, 32, LR_LOADFROMFILE)
+                hicon_small = ctypes.windll.user32.LoadImageW(None, str(ico_ditemukan), IMAGE_ICON, 16, 16, LR_LOADFROMFILE)
+                if hicon_big:
+                    ctypes.windll.user32.SendMessageW(hwnd, 0x0080, 1, hicon_big)
+                if hicon_small:
+                    ctypes.windll.user32.SendMessageW(hwnd, 0x0080, 0, hicon_small)
+            except Exception:
+                pass
+            return
 
         try:
             from PIL import Image, ImageTk
@@ -265,27 +292,20 @@ class ShellLayoutMixin:
         )
         header.pack(fill="x", pady=(0, 8))
 
-        left_title = ctk.CTkFrame(header, fg_color="transparent")
-        left_title.pack(side="left", padx=18, pady=10)
-
-        self.lbl_page_title = ctk.CTkLabel(
-            left_title,
-            text="KTP Proyek (Lapis 1)",
-            font=ctk.CTkFont(size=18, weight="bold"),
-            text_color=TEXT_PRIMARY,
-        )
-        self.lbl_page_title.pack(anchor="w")
+        # Baris 1: Breadcrumb navigasi di kiri, Status Badges di kanan
+        row_top = ctk.CTkFrame(header, fg_color="transparent")
+        row_top.pack(fill="x", padx=16, pady=(8, 2))
 
         self.lbl_breadcrumb = ctk.CTkLabel(
-            left_title,
+            row_top,
             text=f"Karjimut  /  {self.kode_proyek_aktif}  /  Core Proyek",
             font=ctk.CTkFont(size=11, weight="bold"),
             text_color=BRAND_TEAL,
         )
-        self.lbl_breadcrumb.pack(anchor="w")
+        self.lbl_breadcrumb.pack(side="left")
 
-        right_bar = ctk.CTkFrame(header, fg_color="transparent")
-        right_bar.pack(side="right", padx=(6, 16), pady=10)
+        right_bar = ctk.CTkFrame(row_top, fg_color="transparent")
+        right_bar.pack(side="right")
 
         self.badge_provider = ctk.CTkLabel(
             right_bar,
@@ -295,9 +315,9 @@ class ShellLayoutMixin:
             text_color=BRAND_DARK,
             corner_radius=10,
             padx=12,
-            pady=6,
+            pady=4,
         )
-        self.badge_provider.pack(side="right", padx=(6, 2))
+        self.badge_provider.pack(side="right", padx=(6, 0))
 
         self.badge_siklus = ctk.CTkLabel(
             right_bar,
@@ -307,18 +327,30 @@ class ShellLayoutMixin:
             text_color=PILL_INFO_FG,
             corner_radius=10,
             padx=10,
-            pady=6,
+            pady=4,
         )
-        self.badge_siklus.pack(side="right", padx=(0, 4))
+        self.badge_siklus.pack(side="right")
+
+        # Baris 2: Judul Halaman Utama di kiri, Toolbar Pemilihan & Aksi Proyek di kanan
+        row_bottom = ctk.CTkFrame(header, fg_color="transparent")
+        row_bottom.pack(fill="x", padx=16, pady=(2, 10))
+
+        self.lbl_page_title = ctk.CTkLabel(
+            row_bottom,
+            text="KTP Proyek (Lapis 1)",
+            font=ctk.CTkFont(size=18, weight="bold"),
+            text_color=TEXT_PRIMARY,
+        )
+        self.lbl_page_title.pack(side="left")
 
         center_bar = ctk.CTkFrame(
-            header,
+            row_bottom,
             fg_color=BG_SUBTLE,
             corner_radius=10,
             border_width=1,
             border_color=BORDER_CARD,
         )
-        center_bar.pack(side="left", padx=8, pady=10)
+        center_bar.pack(side="right")
 
         self.lbl_proyek_prefix = ctk.CTkLabel(
             center_bar,
@@ -326,13 +358,13 @@ class ShellLayoutMixin:
             font=ctk.CTkFont(size=12, weight="bold"),
             text_color=TEXT_SECONDARY,
         )
-        self.lbl_proyek_prefix.pack(side="left", padx=(10, 6), pady=6)
+        self.lbl_proyek_prefix.pack(side="left", padx=(10, 6), pady=4)
 
         self.opt_proyek = ctk.CTkOptionMenu(
             center_bar,
             values=self.daftar_proyek_tersedia,
             command=self._on_ganti_proyek,
-            width=120,
+            width=115,
             height=30,
             fg_color=BG_CARD,
             text_color=TEXT_PRIMARY,
@@ -344,7 +376,7 @@ class ShellLayoutMixin:
             font=ctk.CTkFont(size=12, weight="bold"),
         )
         self.opt_proyek.set(self.kode_proyek_aktif)
-        self.opt_proyek.pack(side="left", padx=(0, 4), pady=6)
+        self.opt_proyek.pack(side="left", padx=(0, 4), pady=4)
 
         self.btn_tambah_proyek = ctk.CTkButton(
             center_bar,
@@ -358,12 +390,12 @@ class ShellLayoutMixin:
             font=ctk.CTkFont(size=12, weight="bold"),
             command=self._dialog_proyek_baru,
         )
-        self.btn_tambah_proyek.pack(side="left", padx=(0, 4), pady=6)
+        self.btn_tambah_proyek.pack(side="left", padx=(0, 4), pady=4)
 
         self.btn_gabung_proyek = ctk.CTkButton(
             center_bar,
-            text=t("btn_gabung_proyek"),
-            width=68,
+            text="✏️ " + t("btn_gabung_proyek"),
+            width=78,
             height=30,
             corner_radius=8,
             fg_color=BG_CARD,
@@ -374,7 +406,7 @@ class ShellLayoutMixin:
             font=ctk.CTkFont(size=11, weight="bold"),
             command=self._dialog_ganti_nama_proyek,
         )
-        self.btn_gabung_proyek.pack(side="left", padx=(0, 4), pady=6)
+        self.btn_gabung_proyek.pack(side="left", padx=(0, 4), pady=4)
 
         ctk.CTkButton(
             center_bar,
@@ -387,7 +419,7 @@ class ShellLayoutMixin:
             text_color=PILL_DANGER_FG,
             font=ctk.CTkFont(size=12),
             command=self._dialog_hapus_proyek,
-        ).pack(side="left", padx=(0, 4), pady=6)
+        ).pack(side="left", padx=(0, 4), pady=4)
 
         ctk.CTkButton(
             center_bar,
@@ -400,7 +432,7 @@ class ShellLayoutMixin:
             text_color=PILL_SUCCESS_FG,
             font=ctk.CTkFont(size=13),
             command=lambda: self.refresh_semua_data(force_editor=True),
-        ).pack(side="left", padx=(0, 6), pady=6)
+        ).pack(side="left", padx=(0, 6), pady=4)
 
     def _build_kpi_summary_row(self) -> None:
         kpi_row = ctk.CTkFrame(self.main_area, fg_color="transparent")
