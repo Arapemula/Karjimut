@@ -192,6 +192,33 @@ class Settings:
 def get_settings() -> Settings:
     """Membaca konfigurasi terkini dari environment."""
     raw_db = _env_str("KARJIMUT_DB_PATH", "") or _env_str("SLEEP_MCP_DB_PATH", "data/sleep_mcp.db")
+    raw_key = _env_str("LLM_API_KEY", "")
+    raw_prov = _env_str("LLM_PROVIDER", "").lower()
+
+    # Auto-infer provider jika belum disetel eksplisit
+    if not raw_prov:
+        if raw_key.startswith("AIza") or raw_key.startswith("AQ.") or raw_key.startswith("AQ"):
+            raw_prov = "gemini"
+        elif raw_key.startswith("gsk_") or raw_key.startswith("sk-proj-") or (raw_key.startswith("sk-") and not raw_key.startswith("sk-ant-")):
+            raw_prov = "openai"
+        elif raw_key.startswith("sk-ant-"):
+            raw_prov = "anthropic"
+        else:
+            raw_prov = "gemini"
+
+    if raw_prov == "gemini":
+        default_base = "https://generativelanguage.googleapis.com/v1beta"
+        default_model = "gemini-3.5-flash"
+    elif raw_prov == "anthropic":
+        default_base = "https://api.anthropic.com/v1"
+        default_model = "claude-haiku-5-5"
+    elif raw_prov == "ollama":
+        default_base = "http://localhost:11434"
+        default_model = "llama3.2"
+    else:
+        default_base = "https://api.openai.com/v1"
+        default_model = "gpt-4o-mini"
+
     return Settings(
         db_path=_resolve_db_path(raw_db),
         ktp_max_tokens=_env_int("KTP_MAX_TOKENS", 0, minimum=0),
@@ -201,10 +228,10 @@ def get_settings() -> Settings:
         sleep_batch_limit=_env_int("SLEEP_BATCH_LIMIT", 200, minimum=1),
         working_window_seconds=_env_int("WORKING_WINDOW_SECONDS", 60, minimum=1),
         embedded_watcher_mcp=_env_bool("KARJIMUT_EMBEDDED_WATCHER", _env_bool("SLEEP_MCP_EMBEDDED_WATCHER", True)),
-        llm_provider=_env_str("LLM_PROVIDER", "openai").lower(),
-        llm_api_base_url=_env_str("LLM_API_BASE_URL", "https://api.openai.com/v1").rstrip("/"),
-        llm_api_key=_env_str("LLM_API_KEY", ""),
-        llm_model_name=_env_str("LLM_MODEL_NAME", "gemini-3.5-flash"),
+        llm_provider=raw_prov,
+        llm_api_base_url=_env_str("LLM_API_BASE_URL", default_base).rstrip("/"),
+        llm_api_key=raw_key,
+        llm_model_name=_env_str("LLM_MODEL_NAME", default_model),
         llm_timeout_seconds=_env_float("LLM_TIMEOUT_SECONDS", 60.0),
         llm_temperature=_env_float("LLM_TEMPERATURE", 0.1),
         use_local_fallback=_env_bool("USE_LOCAL_FALLBACK", False),

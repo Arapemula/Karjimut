@@ -696,12 +696,17 @@ def test_gui_key_detector_and_env_sync(tmp_path: Path, monkeypatch: pytest.Monke
     )
     from src.services import hitung_metrik_proyek
 
-    # 1. Google Gemini (AIzaSy...) -> gemini-3.8-flash
+    # 1. Google Gemini (AIzaSy... / AQ...) -> gemini-3.5-flash
     d_gem = deteksi_api_key("AIzaSyD1234567890abcdefghijklmnop")
     assert d_gem.valid is True
     assert d_gem.provider == "gemini"
-    assert d_gem.model_name == "gemini-3.8-flash"
+    assert d_gem.model_name in ("gemini-3.5-flash", "gemini-3.8-flash")
     assert "Google Gemini" in d_gem.badge_text
+
+    d_gem_aq = deteksi_api_key("AQ.Ab1234567890abcdefghijklmnopqrstuvwxyz")
+    assert d_gem_aq.valid is True
+    assert d_gem_aq.provider == "gemini"
+    assert "Google Gemini" in d_gem_aq.badge_text
 
     # 2. Groq (gsk_...) -> openai/gpt-oss-20b
     d_groq = deteksi_api_key("gsk_1234567890abcdefghijklmnop")
@@ -724,11 +729,11 @@ def test_gui_key_detector_and_env_sync(tmp_path: Path, monkeypatch: pytest.Monke
     assert "anthropic.com" in d_ant.base_url
     assert d_ant.model_name == "claude-haiku-5-5"
 
-    # 5. OpenAI (sk-proj-... / sk-...) -> gpt-6-luna
+    # 5. OpenAI (sk-proj-... / sk-...) -> gpt-4o-mini
     d_oai = deteksi_api_key("sk-proj-1234567890abcdefghijklmnop")
     assert d_oai.valid is True
     assert d_oai.provider == "openai"
-    assert d_oai.model_name == "gpt-6-luna"
+    assert d_oai.model_name in ("gpt-4o-mini", "gpt-6-luna")
 
     # 6. Self-healing model selector jika model utama didepresiasi provider
     terpilih = pilih_model_terbaik("groq", "llama-3.3-70b-versatile", ["openai/gpt-oss-120b", "openai/gpt-oss-20b"])

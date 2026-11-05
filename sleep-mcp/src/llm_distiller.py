@@ -129,7 +129,8 @@ def panggil_llm_json(
     token_prompt = token_completion = 0
     with httpx.Client(timeout=timeout) as client:
         if s.llm_provider == "gemini":
-            url = f"{base}/models/{s.llm_model_name}:generateContent"
+            model_clean = s.llm_model_name.replace("models/", "")
+            url = f"{base}/models/{model_clean}:generateContent"
             headers = {"Content-Type": "application/json"}
             if s.llm_api_key:
                 headers["x-goog-api-key"] = s.llm_api_key

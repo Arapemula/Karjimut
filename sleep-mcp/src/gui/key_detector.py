@@ -342,7 +342,7 @@ def pilih_model_terbaik(
     stabil = [m for m in daftar_tersedia if not _MODEL_DIHINDARI.search(m)]
     kandidat: list[str] = []
     if provider == "gemini":
-        kandidat = [m for m in stabil if re.fullmatch(r"gemini-[\d.]+-flash", m)]
+        kandidat = [m for m in stabil if re.search(r"gemini-[\d.]+-flash|gemini-flash", m)]
     elif provider == "anthropic":
         kandidat = [m for m in stabil if "haiku" in m] or [m for m in stabil if "sonnet" in m]
     elif provider == "ollama":
