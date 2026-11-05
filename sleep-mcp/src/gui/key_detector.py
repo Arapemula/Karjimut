@@ -27,7 +27,7 @@ GOOGLE_AI_STUDIO_URL = "https://aistudio.google.com/app/apikey"
 # Model default per provider. ID model cepat usang, jadi nilai ini diverifikasi ke endpoint
 # list-models provider (lihat tes_koneksi_llm) dan otomatis diganti bila sudah tidak tersedia.
 MODEL_DEFAULT: dict[str, str] = {
-    "gemini": "gemini-3.8-flash",
+    "gemini": "gemini-3.5-flash",
     "groq": "openai/gpt-oss-20b",
     "openrouter": "openrouter/auto",
     "anthropic": "claude-haiku-5-5",
@@ -127,7 +127,7 @@ def deteksi_api_key(
         )
 
     # 2. Deteksi berdasarkan prefix API Key
-    if kunci.startswith("AIza"):
+    if kunci.startswith("AIza") or kunci.startswith("AQ.") or kunci.startswith("AQ"):
         provider = "gemini"
         provider_label = "Google Gemini"
         base_url = c_url or "https://generativelanguage.googleapis.com/v1beta"
