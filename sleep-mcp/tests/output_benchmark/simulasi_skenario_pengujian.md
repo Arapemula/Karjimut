@@ -3,7 +3,7 @@
 **Sistem:**
 *Karjimut: Two-Tier Memory Architecture with Idle Consolidation and Elastic Core*
 
-- **Waktu Simulasi:** 2026-11-05 12:15:09
+- **Waktu Simulasi:** 2026-11-05 18:17:40
 - **Tokenizer:** tiktoken/cl100k_base
 - **Database Engine:** SQLite 3 WAL Mode with FTS5 BM25
 
@@ -50,11 +50,11 @@
 
 | No | Nama Bug / Error         | Baseline Retry | Baseline Waktu | Sleep-MCP Steps   | Sleep-MCP Waktu | Speedup | Top-3 BM25 Match |
 | -- | ------------------------ | -------------- | -------------- | ----------------- | --------------- | ------- | ---------------- |
-| 1  | CORS Origin Blocked      | 4 steps        | 42.5s          | 1 step (One-Shot) | 0.1121s         | 379.1x  | VALID (Top-1)    |
-| 2  | Database Pool Timeout    | 5 steps        | 58.0s          | 1 step (One-Shot) | 0.0470s         | 1234.0x | VALID (Top-1)    |
-| 3  | JWT Token Expired        | 3 steps        | 31.0s          | 1 step (One-Shot) | 0.0436s         | 711.0x  | VALID (Top-1)    |
-| 4  | Alembic Multiple Heads   | 4 steps        | 45.0s          | 1 step (One-Shot) | 0.0395s         | 1139.2x | VALID (Top-1)    |
-| 5  | Redis Connection Refused | 3 steps        | 28.5s          | 1 step (One-Shot) | 0.0483s         | 590.1x  | VALID (Top-1)    |
+| 1  | CORS Origin Blocked      | 4 steps        | 42.5s          | 1 step (One-Shot) | 0.2123s         | 200.2x  | VALID (Top-1)    |
+| 2  | Database Pool Timeout    | 5 steps        | 58.0s          | 1 step (One-Shot) | 0.0459s         | 1263.6x | VALID (Top-1)    |
+| 3  | JWT Token Expired        | 3 steps        | 31.0s          | 1 step (One-Shot) | 0.0333s         | 930.9x  | VALID (Top-1)    |
+| 4  | Alembic Multiple Heads   | 4 steps        | 45.0s          | 1 step (One-Shot) | 0.0365s         | 1232.9x | VALID (Top-1)    |
+| 5  | Redis Connection Refused | 3 steps        | 28.5s          | 1 step (One-Shot) | 0.0439s         | 649.2x  | VALID (Top-1)    |
 
 ### Indikator Target Skenario 3:
 1. **One-Shot Resolution:** AI Agent Sleep-MCP menyelesaikan bug dalam **1 langkah langsung** (0 retry steps) dibandingkan AI Agent standar yang membutuhkan rata-rata **3.8 langkah trial-and-error**.

@@ -39,5 +39,5 @@
   "aturan_terpenuhi": 5,
   "total_aturan": 5,
   "rule_retention_rate": 100.0,
-  "ktp_final": "[KTP Proyek: skripsi-rule-retention-test | Versi: 2 | Token: 122 (Elastic) | Update: 2026-11-05 05:15:07]\nProyek skripsi-rule-retention-test. Stack: Redis, Celery. Aturan: (1) Wajib menggunakan connection pool PostgreSQL dengan library asyncpg; (2) Dilarang menggunakan raw SQL query tanpa parameterized binding untuk cegah SQL injection; (3) Wajib validasi seluruh skema request dan response menggunakan Pydantic v2; (4) Endpoint API wajib menerapkan rate limiting maksimal 100 request per menit; (5) Wajib menyertakan header correlation-id pada setiap logging format JSON."
+  "ktp_final": "[KTP Proyek: skripsi-rule-retention-test | Versi: 2 | Token: 122 (Elastic) | Update: 2026-11-05 11:17:38]\nProyek skripsi-rule-retention-test. Stack: Redis, Celery. Aturan: (1) Wajib menggunakan connection pool PostgreSQL dengan library asyncpg; (2) Dilarang menggunakan raw SQL query tanpa parameterized binding untuk cegah SQL injection; (3) Wajib validasi seluruh skema request dan response menggunakan Pydantic v2; (4) Endpoint API wajib menerapkan rate limiting maksimal 100 request per menit; (5) Wajib menyertakan header correlation-id pada setiap logging format JSON."
 }

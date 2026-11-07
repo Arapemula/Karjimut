@@ -72,7 +72,11 @@ class KtpTabMixin:
 
         self.lbl_token_counter = ctk.CTkLabel(
             top_bar,
-            text=t("tab1_capacity", used=0, max=150, pct=0),
+            text=(
+                f"{t('kpi_core_title')}: 0 Token ({t('tab1_elastic')})"
+                if self.settings.ktp_max_tokens <= 0
+                else t("tab1_capacity", used=0, max=self.settings.ktp_max_tokens, pct=0)
+            ),
             font=ctk.CTkFont(size=12, weight="bold"),
             text_color=PILL_SUCCESS_FG,
         )
