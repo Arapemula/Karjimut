@@ -202,8 +202,91 @@ def pastikan_lingkungan_siap(auto_install: bool = True, fast_boot: bool = False)
         pasang_aturan_otomatis_global(verbose=False, pasang_global=False)
 
 
+def hentikan_proses_wrapper_terkunci(verbose: bool = False) -> int:
+    """Menghentikan proses ``Scripts/karjimut.exe`` atau ``sleep-mcp.exe`` lama di Windows.
+
+    Mencegah ``PermissionError: [WinError 32]`` ketika pengguna menjalankan
+    ``pip uninstall karjimut`` atau ``pip install -U karjimut``.
+    """
+    if sys.platform != "win32":
+        return 0
+    my_pid = os.getpid()
+    parent_pid = os.getppid()
+    dihentikan = 0
+    for exe_name in ("karjimut.exe", "sleep-mcp.exe"):
+        try:
+            proc = subprocess.run(
+                [
+                    "taskkill",
+                    "/F",
+                    "/IM",
+                    exe_name,
+                    "/FI",
+                    f"PID ne {my_pid}",
+                    "/FI",
+                    f"PID ne {parent_pid}",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            if "SUCCESS" in (proc.stdout or "").upper():
+                dihentikan += 1
+                if verbose:
+                    print(f"[Info] Proses terkunci '{exe_name}' di latar belakang berhasil dibebaskan.")
+        except Exception:
+            pass
+    # Bersihkan folder residu '~arjimut*' akibat pip uninstall yang sempat gagal sebelumnya
+    try:
+        import site
+
+        for sp in site.getsitepackages() + [site.getusersitepackages()]:
+            sp_path = Path(sp)
+            if sp_path.is_dir():
+                for sisa in sp_path.glob("~arjimut*"):
+                    shutil.rmtree(sisa, ignore_errors=True)
+    except Exception:
+        pass
+    return dihentikan
+
+
 def jalankan_desktop_gui() -> None:
-    """Meluncurkan Aplikasi Desktop Native Karjimut berbasis CustomTkinter."""
+    """Meluncurkan Aplikasi Desktop Native Karjimut berbasis CustomTkinter.
+
+    Pada Windows, bila dipanggil dari wrapper ``Scripts/karjimut.exe``, fungsi ini
+    meluncurkan proses ``pythonw.exe -m karjimut gui`` secara terpisah (*detached*)
+    lalu langsung keluar dari ``karjimut.exe`` dalam <0.1 detik agar file
+    ``Scripts/karjimut.exe`` tidak terkunci oleh OS (mencegah ``WinError 32`` saat
+    ``pip install -U karjimut`` atau ``pip uninstall karjimut``).
+    """
+    if (
+        sys.platform == "win32"
+        and not IS_FROZEN
+        and os.environ.get("KARJIMUT_GUI_WORKER") != "1"
+        and os.environ.get("KARJIMUT_FOREGROUND") != "1"
+        and (IS_INSTALLED_PACKAGE or Path(sys.argv[0]).stem.lower() in ("karjimut", "sleep-mcp"))
+    ):
+        try:
+            py_console = Path(_get_console_python())
+            pyw_kandidat = py_console.with_name("pythonw.exe")
+            runner_exe = str(pyw_kandidat) if pyw_kandidat.exists() else str(py_console)
+            env_child = os.environ.copy()
+            env_child["KARJIMUT_GUI_WORKER"] = "1"
+            flags = (
+                getattr(subprocess, "DETACHED_PROCESS", 0x00000008)
+                | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200)
+                | getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
+            )
+            subprocess.Popen(
+                [runner_exe, "-m", "karjimut", "gui"],
+                env=env_child,
+                creationflags=flags,
+                close_fds=True,
+            )
+            return
+        except Exception:
+            pass
+
     if sys.platform == "win32":
         try:
             import ctypes
@@ -295,14 +378,14 @@ def build_standalone_exe() -> int:
 
 
 def _get_mcp_server_config() -> dict[str, object]:
-    """Mengembalikan konfigurasi JSON server Karjimut yang paling andal untuk platform saat ini."""
-    if shutil.which("karjimut"):
-        return {
-            "command": "karjimut",
-            "args": ["mcp"],
-        }
+    """Mengembalikan konfigurasi JSON server Karjimut yang paling andal untuk platform saat ini.
+
+    Penting (Windows): Menggunakan ``python.exe -m karjimut mcp`` alih-alih ``karjimut.exe``
+    agar proses MCP server di IDE tidak mengunci ``Scripts/karjimut.exe`` (mencegah
+    ``PermissionError: [WinError 32]`` saat ``pip uninstall karjimut`` atau ``pip install -U karjimut``).
+    """
     py_exe = _get_console_python()
-    if IS_INSTALLED_PACKAGE:
+    if IS_INSTALLED_PACKAGE or importlib.util.find_spec("karjimut") is not None:
         return {
             "command": py_exe,
             "args": ["-m", "karjimut", "mcp"],
@@ -353,6 +436,7 @@ def auto_inject_mcp_ke_semua_ide(verbose: bool = True) -> list[str]:
       5. VS Code Cline & Roo Code (globalStorage mcp settings)
     """
     server_cfg = _get_mcp_server_config()
+    hentikan_proses_wrapper_terkunci(verbose=verbose)
     terinjeksi: list[str] = []
     home = Path.home()
     appdata = Path(os.environ.get("APPDATA", home / "AppData" / "Roaming"))
@@ -541,7 +625,7 @@ def main() -> None:
                 from karjimut import __app_name__, __version__
             except Exception:
                 __app_name__ = "Karjimut"
-                __version__ = "2.0.11"
+                __version__ = "2.0.12"
 
     parser = argparse.ArgumentParser(description="Karjimut One-Step Runner")
     parser.add_argument(
@@ -554,7 +638,7 @@ def main() -> None:
     parser.add_argument(
         "aksi",
         nargs="?",
-        choices=["gui", "menu", "test", "benchmark", "mcp", "setup", "setup-ide", "build-exe", "version"],
+        choices=["gui", "menu", "test", "benchmark", "mcp", "setup", "setup-ide", "stop", "build-exe", "version"],
         default="gui",
         help="Aksi yang ingin dijalankan (default: gui / Aplikasi Desktop CustomTkinter)",
     )
@@ -563,6 +647,11 @@ def main() -> None:
 
     if args.aksi == "version":
         print(f"{__app_name__} v{__version__}")
+        sys.exit(0)
+    elif args.aksi == "stop":
+        jml = hentikan_proses_wrapper_terkunci(verbose=True)
+        if jml == 0:
+            print("[Info] Tidak ada proses wrapper karjimut.exe / sleep-mcp.exe yang sedang terkunci.")
         sys.exit(0)
     elif args.aksi == "gui":
         jalankan_desktop_gui()

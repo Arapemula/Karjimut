@@ -619,8 +619,8 @@ class SettingsTabMixin:
                 mcp_json = {
                     "mcpServers": {
                         "karjimut": {
-                            "command": "karjimut",
-                            "args": ["mcp"],
+                            "command": "python",
+                            "args": ["-m", "karjimut", "mcp"],
                         }
                     }
                 }
@@ -645,9 +645,25 @@ class SettingsTabMixin:
         elif exe_kandidat_3.exists():
             cmd_path = exe_kandidat_3.resolve().as_posix()
             args_list = ["mcp"]
-        elif cli_karjimut and not (PROJECT_ROOT / "run.py").exists():
-            cmd_path = Path(cli_karjimut).resolve().as_posix()
-            args_list = ["mcp"]
+        elif (IS_INSTALLED_PACKAGE or cli_karjimut) and not (PROJECT_ROOT / "run.py").exists():
+            cmd_path = Path(sys.executable).resolve().as_posix()
+            if cmd_path.lower().endswith("pythonw.exe"):
+                kandidat = Path(sys.executable).with_name("python.exe")
+                if kandidat.exists():
+                    cmd_path = kandidat.resolve().as_posix()
+            args_list = ["-m", "karjimut", "mcp"]
+            mcp_json = {
+                "mcpServers": {
+                    "karjimut": {
+                        "command": cmd_path,
+                        "args": args_list,
+                    }
+                }
+            }
+            teks_json = json.dumps(mcp_json, indent=2)
+            self.txt_mcp_json.delete("1.0", "end")
+            self.txt_mcp_json.insert("1.0", teks_json)
+            return
         else:
             cmd_path = Path(sys.executable).resolve().as_posix()
             if cmd_path.lower().endswith("pythonw.exe"):
