@@ -64,7 +64,7 @@ class ProjectDialogsMixin:
         try:
             with koneksi(self.settings.db_path) as conn:
                 hasil = gabung_atau_ganti_nama_proyek(conn, asal, input_tujuan)
-        except ValueError as exc:
+        except (ValueError, RuntimeError) as exc:
             self.lbl_footer.configure(text=f"⚠️ Gagal ganti nama proyek: {exc}", text_color=PILL_DANGER_FG)
             return
 
@@ -145,9 +145,14 @@ class ProjectDialogsMixin:
         ).pack(side="left")
 
         def _eksekusi_hapus() -> None:
-            with koneksi(self.settings.db_path) as conn:
-                hapus_proyek(conn, kode)
-                proyek_sisa = daftar_proyek(conn)
+            try:
+                with koneksi(self.settings.db_path) as conn:
+                    hapus_proyek(conn, kode)
+                    proyek_sisa = daftar_proyek(conn)
+            except (ValueError, RuntimeError) as exc:
+                win.destroy()
+                self.lbl_footer.configure(text=f"⚠️ Gagal hapus proyek: {exc}", text_color=PILL_DANGER_FG)
+                return
             win.destroy()
             if not proyek_sisa:
                 proyek_sisa = ["default"]

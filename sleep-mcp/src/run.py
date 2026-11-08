@@ -134,10 +134,13 @@ def pasang_aturan_otomatis_global(verbose: bool = False, pasang_global: bool = F
                 _tulis_jika_berubah(global_rule_file, isi_rule)
 
                 global_gemini_md = gemini_home / "GEMINI.md"
-                if not global_gemini_md.exists() or "Sleep-MCP" not in global_gemini_md.read_text(encoding="utf-8", errors="ignore"):
-                    existing = global_gemini_md.read_text(encoding="utf-8", errors="ignore").strip() if global_gemini_md.exists() else ""
+                existing_raw = global_gemini_md.read_text(encoding="utf-8", errors="ignore") if global_gemini_md.exists() else ""
+                if not global_gemini_md.exists() or "karjimut" not in existing_raw.lower():
+                    existing = existing_raw.strip()
                     gabungan = (existing + "\n\n" + isi_gemini_md).strip() + "\n" if existing else isi_gemini_md
                     _tulis_jika_berubah(global_gemini_md, gabungan)
+                elif existing_raw.count("# Karjimut Automatic Memory Rule") > 1:
+                    _tulis_jika_berubah(global_gemini_md, isi_gemini_md)
 
                 if verbose:
                     print(f"[Auto-Rule] Global Rule Antigravity terpasang di: {global_rule_file}")
@@ -277,7 +280,7 @@ def build_standalone_exe() -> int:
         "tiktoken",
         "--collect-submodules",
         "mcp",
-        "run.py",
+        str((PACKAGE_DIR / "run.py").resolve()),
     ]
     rc = subprocess.call(cmd, cwd=str(ROOT_DIR))
     dist_exe = ROOT_DIR / "dist" / "Karjimut.exe"
@@ -304,7 +307,10 @@ def _get_mcp_server_config() -> dict[str, object]:
             "command": py_exe,
             "args": ["-m", "karjimut", "mcp"],
         }
-    run_script = (ROOT_DIR / "run.py").resolve().as_posix()
+    kandidat_run = ROOT_DIR / "run.py"
+    if not kandidat_run.exists():
+        kandidat_run = PACKAGE_DIR / "run.py"
+    run_script = kandidat_run.resolve().as_posix()
     return {
         "command": py_exe,
         "args": [run_script, "mcp"],
@@ -388,23 +394,42 @@ def auto_inject_mcp_ke_semua_ide(verbose: bool = True) -> list[str]:
     # 4. Antigravity / Gemini CLI
     gemini_home = home / ".gemini"
     rule_md_src = RULES_TEMPLATE_DIR / "antigravity_rules.md"
-    if gemini_home.exists() and rule_md_src.exists():
+    if gemini_home.exists():
         try:
-            isi_rule = rule_md_src.read_text(encoding="utf-8")
-            isi_gemini_md = isi_rule
-            if isi_gemini_md.startswith("---"):
-                bagian = isi_gemini_md.split("---", 2)
-                if len(bagian) == 3:
-                    isi_gemini_md = bagian[2].lstrip()
-            _tulis_jika_berubah(gemini_home / "config" / "rules" / "sleep-mcp-auto.md", isi_rule)
-            global_gemini_md = gemini_home / "GEMINI.md"
-            if not global_gemini_md.exists() or "karjimut" not in global_gemini_md.read_text(encoding="utf-8", errors="ignore").lower():
-                existing = global_gemini_md.read_text(encoding="utf-8", errors="ignore").strip() if global_gemini_md.exists() else ""
-                gabungan = (existing + "\n\n" + isi_gemini_md).strip() + "\n" if existing else isi_gemini_md
-                _tulis_jika_berubah(global_gemini_md, gabungan)
-            terinjeksi.append(f"Antigravity/Gemini ({gemini_home})")
+            agy_mcp_cfg = gemini_home / "config" / "mcp_config.json"
+            _inject_mcp_into_json(agy_mcp_cfg, server_cfg)
+
+            legacy_agy_mcp = gemini_home / "antigravity" / "mcp_config.json"
+            if legacy_agy_mcp.parent.exists() and not legacy_agy_mcp.is_symlink():
+                try:
+                    if not legacy_agy_mcp.exists() or legacy_agy_mcp.resolve() != agy_mcp_cfg.resolve():
+                        _inject_mcp_into_json(legacy_agy_mcp, server_cfg)
+                except Exception:
+                    pass
+
+            gemini_cli_settings = gemini_home / "settings.json"
+            if gemini_cli_settings.exists():
+                _inject_mcp_into_json(gemini_cli_settings, server_cfg)
+
+            if rule_md_src.exists():
+                isi_rule = rule_md_src.read_text(encoding="utf-8")
+                isi_gemini_md = isi_rule
+                if isi_gemini_md.startswith("---"):
+                    bagian = isi_gemini_md.split("---", 2)
+                    if len(bagian) == 3:
+                        isi_gemini_md = bagian[2].lstrip()
+                _tulis_jika_berubah(gemini_home / "config" / "rules" / "sleep-mcp-auto.md", isi_rule)
+                global_gemini_md = gemini_home / "GEMINI.md"
+                existing_raw = global_gemini_md.read_text(encoding="utf-8", errors="ignore") if global_gemini_md.exists() else ""
+                if not global_gemini_md.exists() or "karjimut" not in existing_raw.lower():
+                    existing = existing_raw.strip()
+                    gabungan = (existing + "\n\n" + isi_gemini_md).strip() + "\n" if existing else isi_gemini_md
+                    _tulis_jika_berubah(global_gemini_md, gabungan)
+                elif existing_raw.count("# Karjimut Automatic Memory Rule") > 1:
+                    _tulis_jika_berubah(global_gemini_md, isi_gemini_md)
+            terinjeksi.append(f"Antigravity/Gemini ({agy_mcp_cfg})")
             if verbose:
-                print(f"  [Auto-Inject] [OK] Antigravity / Gemini CLI: {gemini_home}")
+                print(f"  [Auto-Inject] [OK] Antigravity / Gemini CLI: {agy_mcp_cfg}")
         except Exception:
             pass
 
@@ -452,11 +477,17 @@ def tampilkan_setup_ide(target_dir: str | None = None) -> None:
     if target_dir:
         tujuan = Path(target_dir).resolve()
         tujuan.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(RULES_TEMPLATE_DIR / ".cursorrules", tujuan / ".cursorrules")
-        shutil.copyfile(RULES_TEMPLATE_DIR / "antigravity_rules.md", tujuan / "GEMINI.md")
-        agents_dir = tujuan / ".agents" / "rules"
-        agents_dir.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(RULES_TEMPLATE_DIR / "antigravity_rules.md", agents_dir / "sleep-mcp-auto.md")
+        src_cursor = RULES_TEMPLATE_DIR / ".cursorrules"
+        src_antigravity = RULES_TEMPLATE_DIR / "antigravity_rules.md"
+        if src_cursor.exists():
+            shutil.copyfile(src_cursor, tujuan / ".cursorrules")
+        if src_antigravity.exists():
+            isi_raw = src_antigravity.read_text(encoding="utf-8")
+            isi_bersih = isi_raw.split("---", 2)[-1].strip() + "\n" if isi_raw.startswith("---") else isi_raw
+            (tujuan / "GEMINI.md").write_text(isi_bersih, encoding="utf-8")
+            agents_dir = tujuan / ".agents" / "rules"
+            agents_dir.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(src_antigravity, agents_dir / "sleep-mcp-auto.md")
         print(f"\n[Berhasil] Aturan Tiga Mandat Otomatis (.cursorrules, GEMINI.md, .agents/rules/) disalin ke: {tujuan}")
 
 

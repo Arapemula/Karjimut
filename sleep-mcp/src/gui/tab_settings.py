@@ -629,7 +629,7 @@ class SettingsTabMixin:
                 self.txt_mcp_json.insert("1.0", teks_json)
                 return
             cmd_path = "python"
-            args_list = ["run.py", "mcp"]
+            args_list = ["run.py", "mcp"] if (PROJECT_ROOT / "run.py").exists() else ["src/run.py", "mcp"]
         elif IS_FROZEN:
             cmd_path = Path(sys.executable).resolve().as_posix()
             args_list = ["mcp"]

@@ -367,6 +367,10 @@ def gabung_atau_ganti_nama_proyek(conn: sqlite3.Connection, sumber: str, target:
 def hapus_proyek(conn: sqlite3.Connection, kode_proyek: str) -> dict[str, int]:
     """Menghapus PERMANEN seluruh data satu proyek. Pemanggil wajib meminta konfirmasi pengguna."""
     kode = normalisasi_kode_proyek(kode_proyek)
+    solusi_ids = [
+        int(r["id"])
+        for r in conn.execute("SELECT id FROM laci_arsip WHERE kode_proyek = ?", (kode,)).fetchall()
+    ]
     with transaksi(conn):
         if _ada_batch_aktif(conn, kode):
             raise RuntimeError("Sleep Cycle sedang berjalan pada proyek ini. Coba lagi beberapa saat.")
@@ -375,4 +379,11 @@ def hapus_proyek(conn: sqlite3.Connection, kode_proyek: str) -> dict[str, int]:
             cur = conn.execute(_SQL_DELETE_BY_PROYEK[tabel], (kode,))
             terhapus[tabel] = cur.rowcount or 0
         conn.execute("DELETE FROM alias_proyek WHERE alias = ? OR kode_proyek = ?", (kode, kode))
+    if solusi_ids:
+        from .embedding import hapus_vektor_solusi
+        for sid in solusi_ids:
+            try:
+                hapus_vektor_solusi(conn, sid)
+            except (sqlite3.Error, RuntimeError, ValueError, OSError) as exc:
+                logger.warning("Gagal menghapus vektor untuk solusi #%d pada hapus_proyek: %s", sid, exc)
     return terhapus

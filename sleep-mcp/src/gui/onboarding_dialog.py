@@ -11,6 +11,7 @@ pengguna belum mengatur API Key LLM. Menyediakan:
 from __future__ import annotations
 
 import webbrowser
+from pathlib import Path
 from typing import Callable
 
 import customtkinter as ctk
