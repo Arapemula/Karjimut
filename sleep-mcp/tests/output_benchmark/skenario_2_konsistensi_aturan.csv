@@ -1,6 +1,11 @@
-No,Aturan Arsitektur,Kata Kunci Verifikasi,Status Retensi
-1,Wajib menggunakan connection pool PostgreSQL dengan library asyncpg.,'asyncpg' / 'connection pool',TERPATUHI (100% Retained)
-2,Dilarang menggunakan raw SQL query tanpa parameterized binding untuk cegah SQL injection.,'parameterized' / 'sql injection',TERPATUHI (100% Retained)
-3,Wajib validasi seluruh skema request dan response menggunakan Pydantic v2.,'pydantic' / 'skema',TERPATUHI (100% Retained)
-4,Endpoint API wajib menerapkan rate limiting maksimal 100 request per menit.,'rate limit' / '100',TERPATUHI (100% Retained)
-5,Wajib menyertakan header correlation-id pada setiap logging format JSON.,'correlation-id' / 'json',TERPATUHI (100% Retained)
+No,Aturan Arsitektur,Kata Kunci Verifikasi,Status Retensi / Unlearning
+1,Wajib menggunakan connection pool PostgreSQL dengan library asyncpg.,'asyncpg' / 'connection pool',TERPATUHI (Retained)
+2,Dilarang menggunakan raw SQL query tanpa parameterized binding untuk cegah SQL injection.,'parameterized' / 'sql injection',TERPATUHI (Retained)
+3,Wajib validasi seluruh skema request dan response menggunakan Pydantic v2.,'pydantic' / 'skema',TERPATUHI (Retained)
+4,Endpoint API wajib menerapkan rate limiting maksimal 100 request per menit.,'rate limit' / '100',TERPATUHI (Retained)
+5,Wajib menyertakan header correlation-id pada setiap logging format JSON.,'correlation-id' / 'json',TERPATUHI (Retained)
+6,Transaksi mutasi saldo wajib bersifat idempotent menggunakan header Idempotency-Key.,'idempotent' / 'idempotency-key',TERPATUHI (Retained)
+7,Dilarang memanggil HTTP API pihak ketiga di dalam blok transaksi database terbuka.,'pihak ketiga' / 'transaksi database',TERPATUHI (Retained)
+8,Worker Celery wajib mengaktifkan acks_late=True pada antrean pembayaran.,'acks_late' / 'celery',TERPATUHI (Retained)
+9,Semua endpoint wajib memakai OAuth2 Bearer JWT dengan rotasi refresh token.,'oauth2' / 'bearer jwt',TERPATUHI (Retained)
+10,Semua endpoint wajib memakai Basic Auth untuk autentikasi internal.,'basic auth' / 'autentikasi internal' (Wajib Dicabut),TERHAPUS BERSIH (Unlearned)

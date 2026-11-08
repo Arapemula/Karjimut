@@ -1,6 +1,16 @@
-No,Nama Bug,Query Gejala,Baseline Steps,Baseline Waktu,MCP Steps,MCP Waktu,Speedup,Akurasi Top-3,Skor BM25
-1,CORS Origin Blocked,Access to fetch at 'http://localhost:8000' fr...,4,42.5s,1,0.2123s,200.2x,VALID (Top-1),-3.152564
-2,Database Pool Timeout,QueuePool limit of size 5 overflow 10 reached...,5,58.0s,1,0.0459s,1263.6x,VALID (Top-1),-8.441527
-3,JWT Token Expired,HTTP 401 Unauthorized Signature has expired d...,3,31.0s,1,0.0333s,930.9x,VALID (Top-1),-8.92839
-4,Alembic Multiple Heads,Multiple head revisions are present in alembi...,4,45.0s,1,0.0365s,1232.9x,VALID (Top-1),-5.277277
-5,Redis Connection Refused,Error 111 connecting to 127.0.0.1:6379 Connec...,3,28.5s,1,0.0439s,649.2x,VALID (Top-1),-10.609489
+No,Nama Bug,Query Gejala,Baseline Steps,Linear Scan Waktu (Aktual),MCP Steps,Hybrid FTS5+Vec Waktu (Aktual),Rasio Latensi,Akurasi Top-3,Skor BM25
+1,CORS Origin Blocked (Trace EN),Access to fetch at 'http://localhost:8000' fr...,4,309.94 ms,1,147.79 ms,2.10x,VALID (Top-1),-3.792521
+2,Database Pool Timeout (Trace EN),QueuePool limit of size 5 overflow 10 reached...,5,190.49 ms,1,85.11 ms,2.24x,VALID (Top-1),-10.015108
+3,JWT Token Expired (Trace EN),HTTP 401 Unauthorized Signature has expired d...,3,178.93 ms,1,59.68 ms,3.00x,VALID (Top-1),-10.575675
+4,Alembic Multiple Heads (Trace EN),Multiple head revisions are present in alembi...,4,152.89 ms,1,54.90 ms,2.79x,VALID (Top-1),-8.345025
+5,Redis Connection Refused (Trace EN),Error 111 connecting to 127.0.0.1:6379 Connec...,3,137.31 ms,1,91.70 ms,1.50x,VALID (Top-1),-12.55012
+6,CORS Preflight Header (Bilingual ID),request frontend ditolak browser karena prefl...,4,128.77 ms,1,91.70 ms,1.40x,VALID (Top-1),-3.792521
+7,Koneksi Database Terkunci (Bilingual ID),error koneksi database terkunci dan pool time...,5,119.17 ms,1,94.17 ms,1.27x,VALID (Top-1),-10.780624
+8,Sesi Login Kedaluwarsa (Bilingual ID),token jwt expired menyebabkan error 401 unaut...,3,135.38 ms,1,71.71 ms,1.89x,VALID (Top-1),-10.575675
+9,Konflik Cabang Migrasi (Bilingual ID),gagal jalankan migrasi database alembic karen...,4,115.98 ms,1,61.83 ms,1.88x,VALID (Top-1),-21.006956
+10,Port Redis Ditolak (Bilingual ID),koneksi ke cache redis port 6379 connection r...,3,133.75 ms,1,56.25 ms,2.38x,VALID (Top-1),-17.674617
+11,CORS Tag Lookup,#cors-policy #preflight-header,3,20.66 ms,1,30.39 ms,0.68x,VALID (Top-1),-3.135162
+12,DB Pool Tag Lookup,#koneksi-db #pool-timeout,4,21.11 ms,1,36.95 ms,0.57x,VALID (Top-1),-6.77458
+13,JWT Auth Tag Lookup,#jwt-auth #token-expired,3,23.13 ms,1,52.09 ms,0.44x,VALID (Top-1),-6.403163
+14,Alembic Tag Lookup,#alembic #multiple-heads,3,22.78 ms,1,50.07 ms,0.46x,VALID (Top-1),-9.105804
+15,Redis Tag Lookup,#redis #connection-refused,3,36.81 ms,1,31.56 ms,1.17x,VALID (Top-1),-5.891539

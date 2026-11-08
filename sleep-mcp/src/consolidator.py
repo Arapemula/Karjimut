@@ -290,7 +290,7 @@ def jalankan_sleep_cycle(
                 hasil.versi_ktp = info_ktp["versi_ktp"]
 
                 for item in distilat["arsip_solusi"]:
-                    detail = simpan_arsip_deduplikasi(conn, kode, item)
+                    detail = simpan_arsip_deduplikasi(conn, kode, item, sync_vektor=False)
                     hasil.detail_arsip.append(detail)
                     if detail["aksi"] == "INSERT":
                         hasil.arsip_insert += 1
@@ -308,9 +308,12 @@ def jalankan_sleep_cycle(
                 if decay_count > 0:
                     logger.debug("[%s] Memory decay diterapkan pada %d solusi.", kode, decay_count)
                 kompaksi_antrean_lama(conn, kode)
-                sinkron_vektor_laci_arsip(conn, limit=50)
                 perbarui_log_pembelajaran(conn, kode)
-                ekspor_memori_tim(conn, kode)
+
+            # Operasi berat (ONNX embedding & I/O file JSON tim) dijalankan DI LUAR transaksi BEGIN IMMEDIATE
+            # agar tidak pernah menahan write-lock SQLite.
+            sinkron_vektor_laci_arsip(conn, limit=50)
+            ekspor_memori_tim(conn, kode)
             hasil.status = "SUCCESS"
             hasil.pesan = (
                 f"Sleep Cycle selesai: {len(batch_ids)} log dirangkum, KTP v{hasil.versi_ktp} "

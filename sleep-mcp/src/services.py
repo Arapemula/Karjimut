@@ -146,17 +146,25 @@ def tambah_solusi(conn: sqlite3.Connection, kode_proyek: str, tag_masalah: str, 
     if not tags or not solusi:
         raise ValueError("Tag masalah dan isi solusi wajib diisi.")
     tag_str = ", ".join(tags)
+    pre_vec = None
+    aktif_backend = None
+    try:
+        from .embedding import generate_embedding, get_active_embedding_backend, simpan_vektor_solusi
+        pre_vec = generate_embedding(f"{tag_str} {solusi}")
+        aktif_backend = get_active_embedding_backend()
+    except Exception as exc:
+        logger.debug("Precompute embedding tambah_solusi dilewati: %s", exc)
     with transaksi(conn):
         cur = conn.execute(
             "INSERT INTO laci_arsip (kode_proyek, tag_masalah, solusi_paten) VALUES (?, ?, ?)",
             (kode, tag_str, solusi),
         )
         new_id = int(cur.lastrowid)
-        try:
-            from .embedding import simpan_vektor_solusi
-            simpan_vektor_solusi(conn, new_id, tag_str, solusi)
-        except (sqlite3.Error, RuntimeError, ValueError, OSError) as exc:
-            logger.warning("Gagal menyinkronkan vektor untuk solusi baru #%d: %s", new_id, exc)
+        if pre_vec is not None:
+            try:
+                simpan_vektor_solusi(conn, new_id, tag_str, solusi, precomputed_vec=pre_vec, backend=aktif_backend)
+            except (sqlite3.Error, RuntimeError, ValueError, OSError) as exc:
+                logger.warning("Gagal menyinkronkan vektor untuk solusi baru #%d: %s", new_id, exc)
     return new_id
 
 
@@ -170,6 +178,14 @@ def perbarui_solusi(
         raise ValueError("Tag masalah dan isi solusi wajib diisi.")
     tag_str = ", ".join(tags)
     sid = int(solusi_id)
+    pre_vec = None
+    aktif_backend = None
+    try:
+        from .embedding import generate_embedding, get_active_embedding_backend, simpan_vektor_solusi
+        pre_vec = generate_embedding(f"{tag_str} {solusi}")
+        aktif_backend = get_active_embedding_backend()
+    except Exception as exc:
+        logger.debug("Precompute embedding perbarui_solusi dilewati: %s", exc)
     with transaksi(conn):
         cur = conn.execute(
             """
@@ -180,11 +196,11 @@ def perbarui_solusi(
         )
         if cur.rowcount == 0:
             raise LookupError(f"Solusi #{solusi_id} tidak ditemukan pada proyek '{kode}'.")
-        try:
-            from .embedding import simpan_vektor_solusi
-            simpan_vektor_solusi(conn, sid, tag_str, solusi)
-        except (sqlite3.Error, RuntimeError, ValueError, OSError) as exc:
-            logger.warning("Gagal memperbarui vektor untuk solusi #%d: %s", sid, exc)
+        if pre_vec is not None:
+            try:
+                simpan_vektor_solusi(conn, sid, tag_str, solusi, precomputed_vec=pre_vec, backend=aktif_backend)
+            except (sqlite3.Error, RuntimeError, ValueError, OSError) as exc:
+                logger.warning("Gagal memperbarui vektor untuk solusi #%d: %s", sid, exc)
     return {"id": sid, "kode_proyek": kode, "tag_masalah": tag_str, "solusi_paten": solusi}
 
 

@@ -1,6 +1,6 @@
-Sesi,Langkah,Baseline Sesi,Aktif MCP Sesi,Efisiensi Aktif (%),Overhead Sleep Sesi,Total MCP Sesi,Baseline Kumulatif,Aktif MCP Kumulatif,Efisiensi Aktif Kumulatif (%),Sleep Overhead Kumulatif,Total MCP Kumulatif,Net Token Savings,Net Savings (%),Status BEP
-Sesi 1,1-8,1115,465,58.3,998,1463,1115,465,58.3,998,1463,-348,-31.21,Investasi Awal
-Sesi 2,9-16,2395,482,79.87,1035,1517,3510,947,73.02,2033,2980,530,15.1,BEP Tercapai (Surplus)
-Sesi 3,17-24,3655,490,86.59,1065,1555,7165,1437,79.94,3098,4535,2630,36.71,BEP Tercapai (Surplus)
-Sesi 4,25-32,5075,483,90.48,1076,1559,12240,1920,84.31,4174,6094,6146,50.21,BEP Tercapai (Surplus)
-Sesi 5,33-40,6400,493,92.3,1129,1622,18640,2413,87.05,5303,7716,10924,58.61,BEP Tercapai (Surplus)
+Sesi,Langkah,Baseline Kumulatif Sesi,Baseline Fresh Sesi,Aktif MCP Sesi,Static Rule+Schema Overhead,Efisiensi Aktif (%),Overhead Sleep Sesi,Total MCP Sesi,Baseline Kumulatif Total,Aktif MCP Kumulatif,Efisiensi Aktif Kumulatif (%),Sleep Overhead Kumulatif,Static Overhead Kumulatif,Total MCP Kumulatif,Net Token Savings (Tanpa Static),Net Token Savings (Full Overhead),Net Savings (%),Status BEP
+Sesi 1,1-8,2057,2057,468,486,77.25,1105,1573,2057,468,77.25,1105,486,1573,484,-2,23.53,Investasi Awal
+Sesi 2,9-16,3819,1958,531,486,86.1,1193,1724,5876,999,83.0,2298,972,3297,2579,1607,43.89,BEP Tercapai (Surplus)
+Sesi 3,17-24,5602,2515,677,486,87.92,1277,1954,11478,1676,85.4,3575,1458,5251,6227,4769,54.25,BEP Tercapai (Surplus)
+Sesi 4,25-32,7237,2235,693,486,90.42,1394,2087,18715,2369,87.34,4969,1944,7338,11377,9433,60.79,BEP Tercapai (Surplus)
+Sesi 5,33-40,8723,2106,646,486,92.59,1325,1971,27438,3015,89.01,6294,2430,9309,18129,15699,66.07,BEP Tercapai (Surplus)

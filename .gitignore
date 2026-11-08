@@ -19,6 +19,8 @@ sleep-mcp/mcp_config_siap_pakai.json
 *.db-wal
 *.db-shm
 sleep-mcp/data/
+.karjimut/
+.sleep-mcp/
 
 # PyInstaller / Build Artifacts
 build/

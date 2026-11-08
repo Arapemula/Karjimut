@@ -23,6 +23,7 @@ from .log_parser import (
     _RE_KLAUSA_ALASAN,
     _RE_MASALAH,
     _RE_MIGRASI_STACK,
+    _RE_NARASI_CHANGELOG,
     _RE_PROMPT_INJECTION,
     _RE_SOLUSI_KATA,
     _RE_SOLUSI_MARKER,
@@ -278,7 +279,12 @@ def local_rule_based_distiller(
                 identitas = identitas[:1].upper() + identitas[1:]
                 stack_entri.extend(deteksi_teknologi(k))
                 continue
-            if _RE_ATURAN_KATA.search(k) and not entri_bug and len(k.split()) <= 30:
+            if (
+                _RE_ATURAN_KATA.search(k)
+                and not entri_bug
+                and not _RE_NARASI_CHANGELOG.search(k)
+                and len(k.split()) <= 25
+            ):
                 aturan = _rapikan_aturan(k)
                 if aturan:
                     aturan_baru.append(aturan)

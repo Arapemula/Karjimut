@@ -28,6 +28,19 @@ from .db import koneksi, normalisasi_kode_proyek
 
 logger = setup_logging("sleep_mcp.idle_watcher")
 
+# Pelacak exponential backoff per proyek: kode_proyek -> (jumlah_gagal_beruntun, monotonic_next_retry)
+_backoff_lock = threading.Lock()
+_backoff_state: dict[str, tuple[int, float]] = {}
+
+
+def reset_idle_backoff(kode_proyek: str | None = None) -> None:
+    """Mereset state exponential backoff (seluruh proyek atau satu proyek)."""
+    with _backoff_lock:
+        if kode_proyek is None:
+            _backoff_state.clear()
+        else:
+            _backoff_state.pop(normalisasi_kode_proyek(kode_proyek), None)
+
 _SQL_COUNTS_ANTREAN = """
     SELECT
         SUM(CASE WHEN status_rangkum = 0 THEN 1 ELSE 0 END) AS pending,
@@ -143,9 +156,24 @@ def periksa_dan_konsolidasi_idle(db_path: str | None = None) -> list[dict[str, A
             (STATUS_PENDING, STATUS_PROCESSING, f"-{int(stale_menit)} minutes", f"-{int(timeout)} seconds"),
         ).fetchall()
 
+    sekarang_mono = time.monotonic()
     for baris in kandidat:
         kode = baris["kode_proyek"]
         jml = baris["jml_pending"]
+        with _backoff_lock:
+            gagal_sebelumnya, next_retry = _backoff_state.get(kode, (0, 0.0))
+        if sekarang_mono < next_retry:
+            logger.debug(
+                "Proyek '%s' sedang dalam masa backoff (sisa %.1fs setelah %dx gagal).",
+                kode,
+                next_retry - sekarang_mono,
+                gagal_sebelumnya,
+            )
+            continue
+
+        # Setelah >= 2 kegagalan LLM berturut-turut, otomatis paksa fallback distiller lokal
+        # agar antrean tidak macet dan tidak membakar kuota API berulang-ulang.
+        paksa_lokal = True if gagal_sebelumnya >= 2 else None
         logger.info(
             "Proyek '%s' idle selama >= %d detik dengan %d log pending. Memulai Sleep Cycle...",
             kode,
@@ -153,10 +181,30 @@ def periksa_dan_konsolidasi_idle(db_path: str | None = None) -> list[dict[str, A
             jml,
         )
         try:
-            hasil_list = jalankan_sleep_cycle_tuntas(kode, db_path=db_path)
+            hasil_list = jalankan_sleep_cycle_tuntas(kode, db_path=db_path, paksa_lokal=paksa_lokal)
+            ada_error = False
             for h in hasil_list:
                 hasil_eksekusi.append(h.to_dict())
+                if h.status == "ERROR":
+                    ada_error = True
+            with _backoff_lock:
+                if ada_error:
+                    gagal_baru = gagal_sebelumnya + 1
+                    jeda = min(1800.0, 30.0 * (2 ** (gagal_baru - 1)))
+                    _backoff_state[kode] = (gagal_baru, time.monotonic() + jeda)
+                    logger.warning(
+                        "Sleep Cycle '%s' gagal (%dx). Retry berikutnya ditunda %.0f detik.",
+                        kode,
+                        gagal_baru,
+                        jeda,
+                    )
+                else:
+                    _backoff_state.pop(kode, None)
         except Exception as exc:
+            with _backoff_lock:
+                gagal_baru = gagal_sebelumnya + 1
+                jeda = min(1800.0, 30.0 * (2 ** (gagal_baru - 1)))
+                _backoff_state[kode] = (gagal_baru, time.monotonic() + jeda)
             logger.exception("Gagal menjalankan Sleep Cycle otomatis untuk '%s': %s", kode, exc)
 
     return hasil_eksekusi

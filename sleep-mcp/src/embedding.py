@@ -104,6 +104,13 @@ def _fallback_hash_embedding(teks: str, dim: int = DIMENSI_VEKTOR) -> list[float
     return vec
 
 
+def get_active_embedding_backend() -> str:
+    """Mengembalikan pengenal backend embedding aktif ('fastembed:...' atau 'hash:v1')."""
+    if _get_fastembed_model() is not None:
+        return f"fastembed:{NAMA_MODEL_DEFAULT}"
+    return "hash:v1"
+
+
 def generate_embedding(teks: str) -> list[float]:
     """Menghasilkan vektor float embedding 384 dimensi untuk sebuah string."""
     clean = _bersihkan_teks_embedding(teks)
@@ -156,6 +163,8 @@ def simpan_vektor_solusi(
     id_solusi: int,
     tag_masalah: str,
     solusi_paten: str,
+    precomputed_vec: Sequence[float] | None = None,
+    backend: str | None = None,
 ) -> bool:
     """Membuat dan menyimpan vektor embedding solusi ke tabel virtual `laci_arsip_vec`."""
     try:
@@ -167,7 +176,8 @@ def simpan_vektor_solusi(
             return False
 
         teks_gabungan = f"{tag_masalah} {solusi_paten}"
-        vec = generate_embedding(teks_gabungan)
+        vec = list(precomputed_vec) if precomputed_vec is not None else generate_embedding(teks_gabungan)
+        aktif_backend = backend or get_active_embedding_backend()
         raw_bytes = vector_ke_bytes(vec)
 
         # INSERT OR REPLACE pada virtual table vec0
@@ -176,6 +186,13 @@ def simpan_vektor_solusi(
             "INSERT INTO laci_arsip_vec(id, embedding) VALUES (?, ?)",
             (int(id_solusi), raw_bytes),
         )
+        try:
+            conn.execute(
+                "UPDATE laci_arsip SET embedding_backend = ? WHERE id = ?",
+                (aktif_backend, int(id_solusi)),
+            )
+        except Exception:
+            pass
         return True
     except Exception as exc:
         logger.warning("Gagal menyimpan vektor solusi id=%s: %s", id_solusi, exc)
@@ -198,7 +215,7 @@ def hapus_vektor_solusi(conn: Any, id_solusi: int) -> bool:
 
 
 def sinkron_vektor_laci_arsip(conn: Any, limit: int = 200) -> int:
-    """Menyinkronkan baris laci_arsip lama yang belum memiliki embedding di laci_arsip_vec."""
+    """Menyinkronkan baris laci_arsip yang belum memiliki embedding atau berbeda backend."""
     try:
         ada_tabel = conn.execute(
             "SELECT 1 FROM sqlite_master WHERE type='table' AND name='laci_arsip_vec'"
@@ -206,23 +223,47 @@ def sinkron_vektor_laci_arsip(conn: Any, limit: int = 200) -> int:
         if not ada_tabel:
             return 0
 
-        rows = conn.execute(
-            """
-            SELECT a.id, a.tag_masalah, a.solusi_paten
-            FROM laci_arsip a
-            LEFT JOIN laci_arsip_vec v ON a.id = v.id
-            WHERE v.id IS NULL
-            LIMIT ?
-            """,
-            (int(limit),),
-        ).fetchall()
+        aktif_backend = get_active_embedding_backend()
+        try:
+            rows = conn.execute(
+                """
+                SELECT a.id, a.tag_masalah, a.solusi_paten
+                FROM laci_arsip a
+                LEFT JOIN laci_arsip_vec v ON a.id = v.id
+                WHERE v.id IS NULL OR a.embedding_backend IS NULL OR a.embedding_backend != ?
+                LIMIT ?
+                """,
+                (aktif_backend, int(limit)),
+            ).fetchall()
+        except Exception:
+            rows = conn.execute(
+                """
+                SELECT a.id, a.tag_masalah, a.solusi_paten
+                FROM laci_arsip a
+                LEFT JOIN laci_arsip_vec v ON a.id = v.id
+                WHERE v.id IS NULL
+                LIMIT ?
+                """,
+                (int(limit),),
+            ).fetchall()
 
         if not rows:
             return 0
 
+        teks_list = [f"{r['tag_masalah']} {r['solusi_paten']}" for r in rows]
+        vecs = batch_embed(teks_list)
+        aktif_backend = get_active_embedding_backend()
+
         terproses = 0
-        for r in rows:
-            if simpan_vektor_solusi(conn, int(r["id"]), r["tag_masalah"], r["solusi_paten"]):
+        for r, vec in zip(rows, vecs):
+            if simpan_vektor_solusi(
+                conn,
+                int(r["id"]),
+                r["tag_masalah"],
+                r["solusi_paten"],
+                precomputed_vec=vec,
+                backend=aktif_backend,
+            ):
                 terproses += 1
         return terproses
     except Exception as exc:

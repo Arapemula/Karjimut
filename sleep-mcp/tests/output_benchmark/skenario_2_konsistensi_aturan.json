@@ -1,43 +1,75 @@
 {
   "kode_proyek": "skripsi-rule-retention-test",
-  "token_ktp_sesi_1": 115,
-  "token_ktp_sesi_2": 122,
-  "token_ktp_sesi_3": 122,
+  "token_ktp_sesi_1": 157,
+  "token_ktp_sesi_2": 239,
+  "token_ktp_sesi_3": 239,
+  "token_bounded_150": 139,
   "hard_limit_terpenuhi": true,
   "aturan_evaluasi": [
     {
       "no": 1,
       "aturan": "Wajib menggunakan connection pool PostgreSQL dengan library asyncpg.",
       "kata_kunci_verifikasi": "'asyncpg' / 'connection pool'",
-      "status": "TERPATUHI (100% Retained)"
+      "status": "TERPATUHI (Retained)"
     },
     {
       "no": 2,
       "aturan": "Dilarang menggunakan raw SQL query tanpa parameterized binding untuk cegah SQL injection.",
       "kata_kunci_verifikasi": "'parameterized' / 'sql injection'",
-      "status": "TERPATUHI (100% Retained)"
+      "status": "TERPATUHI (Retained)"
     },
     {
       "no": 3,
       "aturan": "Wajib validasi seluruh skema request dan response menggunakan Pydantic v2.",
       "kata_kunci_verifikasi": "'pydantic' / 'skema'",
-      "status": "TERPATUHI (100% Retained)"
+      "status": "TERPATUHI (Retained)"
     },
     {
       "no": 4,
       "aturan": "Endpoint API wajib menerapkan rate limiting maksimal 100 request per menit.",
       "kata_kunci_verifikasi": "'rate limit' / '100'",
-      "status": "TERPATUHI (100% Retained)"
+      "status": "TERPATUHI (Retained)"
     },
     {
       "no": 5,
       "aturan": "Wajib menyertakan header correlation-id pada setiap logging format JSON.",
       "kata_kunci_verifikasi": "'correlation-id' / 'json'",
-      "status": "TERPATUHI (100% Retained)"
+      "status": "TERPATUHI (Retained)"
+    },
+    {
+      "no": 6,
+      "aturan": "Transaksi mutasi saldo wajib bersifat idempotent menggunakan header Idempotency-Key.",
+      "kata_kunci_verifikasi": "'idempotent' / 'idempotency-key'",
+      "status": "TERPATUHI (Retained)"
+    },
+    {
+      "no": 7,
+      "aturan": "Dilarang memanggil HTTP API pihak ketiga di dalam blok transaksi database terbuka.",
+      "kata_kunci_verifikasi": "'pihak ketiga' / 'transaksi database'",
+      "status": "TERPATUHI (Retained)"
+    },
+    {
+      "no": 8,
+      "aturan": "Worker Celery wajib mengaktifkan acks_late=True pada antrean pembayaran.",
+      "kata_kunci_verifikasi": "'acks_late' / 'celery'",
+      "status": "TERPATUHI (Retained)"
+    },
+    {
+      "no": 9,
+      "aturan": "Semua endpoint wajib memakai OAuth2 Bearer JWT dengan rotasi refresh token.",
+      "kata_kunci_verifikasi": "'oauth2' / 'bearer jwt'",
+      "status": "TERPATUHI (Retained)"
+    },
+    {
+      "no": 10,
+      "aturan": "Semua endpoint wajib memakai Basic Auth untuk autentikasi internal.",
+      "kata_kunci_verifikasi": "'basic auth' / 'autentikasi internal' (Wajib Dicabut)",
+      "status": "TERHAPUS BERSIH (Unlearned)"
     }
   ],
-  "aturan_terpenuhi": 5,
-  "total_aturan": 5,
+  "aturan_terpenuhi": 10,
+  "total_aturan": 10,
   "rule_retention_rate": 100.0,
-  "ktp_final": "[KTP Proyek: skripsi-rule-retention-test | Versi: 2 | Token: 122 (Elastic) | Update: 2026-11-05 11:17:38]\nProyek skripsi-rule-retention-test. Stack: Redis, Celery. Aturan: (1) Wajib menggunakan connection pool PostgreSQL dengan library asyncpg; (2) Dilarang menggunakan raw SQL query tanpa parameterized binding untuk cegah SQL injection; (3) Wajib validasi seluruh skema request dan response menggunakan Pydantic v2; (4) Endpoint API wajib menerapkan rate limiting maksimal 100 request per menit; (5) Wajib menyertakan header correlation-id pada setiap logging format JSON."
+  "noise_rejection_rate": 100.0,
+  "ktp_final": "[KTP Proyek: skripsi-rule-retention-test | Versi: 2 | Token: 239 (Elastic) | Update: 2026-11-08 09:23:09]\nProyek skripsi-rule-retention-test: Sistem Gateway Pembayaran Enterprise. Stack: Python, FastAPI, PostgreSQL, Redis, Celery, Pytest. Aturan: (1) Wajib menggunakan connection pool PostgreSQL dengan library asyncpg; (2) Dilarang menggunakan raw SQL query tanpa parameterized binding untuk cegah SQL injection; (3) Wajib validasi seluruh skema request dan response menggunakan Pydantic v2; (4) Endpoint API wajib menerapkan rate limiting maksimal 100 request per menit; (5) Wajib menyertakan header correlation-id pada setiap logging format JSON; (6) Semua endpoint wajib memakai OAuth2 Bearer JWT dengan rotasi refresh token; (7) Transaksi mutasi saldo wajib bersifat idempotent menggunakan header Idempotency-Key; (8) Dilarang memanggil HTTP API pihak ketiga di dalam blok transaksi database terbuka; (9) Worker Celery wajib mengaktifkan acks_late=True pada antrean pembayaran."
 }

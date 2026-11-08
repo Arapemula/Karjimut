@@ -82,7 +82,9 @@ DDL_TABEL: tuple[str, ...] = (
         hit_count INTEGER NOT NULL DEFAULT 0,
         miss_count INTEGER NOT NULL DEFAULT 0,
         last_hit TIMESTAMP NULL,
+        last_decay TIMESTAMP NULL,
         is_stale INTEGER NOT NULL DEFAULT 0,
+        embedding_backend TEXT NULL,
         waktu_dibuat TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
     """,
@@ -325,8 +327,12 @@ def _migrasi_skema_v2(conn: sqlite3.Connection) -> None:
             conn.execute("ALTER TABLE laci_arsip ADD COLUMN miss_count INTEGER NOT NULL DEFAULT 0;")
         if cols and "last_hit" not in cols:
             conn.execute("ALTER TABLE laci_arsip ADD COLUMN last_hit TIMESTAMP NULL;")
+        if cols and "last_decay" not in cols:
+            conn.execute("ALTER TABLE laci_arsip ADD COLUMN last_decay TIMESTAMP NULL;")
         if cols and "is_stale" not in cols:
             conn.execute("ALTER TABLE laci_arsip ADD COLUMN is_stale INTEGER NOT NULL DEFAULT 0;")
+        if cols and "embedding_backend" not in cols:
+            conn.execute("ALTER TABLE laci_arsip ADD COLUMN embedding_backend TEXT NULL;")
     except Exception as exc:
         logger.warning("Gagal migrasi kolom laci_arsip: %s", exc)
 

@@ -80,19 +80,34 @@ def terapkan_memory_decay(
     kode_proyek: str,
     hari_threshold: int = 14,
     faktor_decay: float = 0.98,
+    interval_decay_hari: int = 7,
 ) -> int:
-    """Meluruhkan confidence solusi yang tidak pernah diakses/digunakan dalam waktu lama."""
+    """Meluruhkan confidence solusi yang tidak pernah diakses/digunakan berbasis waktu kalender.
+
+    Peluruhan hanya terjadi apabila solusi sudah tidak diakses selama >= ``hari_threshold`` hari
+    (dihitung dari ``COALESCE(last_hit, waktu_dibuat)``) DAN belum pernah mengalami decay dalam
+    ``interval_decay_hari`` terakhir, sehingga frekuensi pemicuan Sleep Cycle harian tidak
+    mempercepat peluruhan secara artifisial.
+    """
     try:
         cur = conn.execute(
             """
             UPDATE laci_arsip
             SET confidence = MAX(0.2, ROUND(confidence * ?, 2)),
-                is_stale = CASE WHEN ROUND(confidence * ?, 2) < 0.35 THEN 1 ELSE 0 END
+                is_stale = CASE WHEN ROUND(confidence * ?, 2) < 0.35 THEN 1 ELSE 0 END,
+                last_decay = CURRENT_TIMESTAMP
             WHERE kode_proyek = ?
-              AND (last_hit IS NULL OR last_hit <= datetime('now', ?))
+              AND COALESCE(last_hit, waktu_dibuat) <= datetime('now', ?)
+              AND (last_decay IS NULL OR last_decay <= datetime('now', ?))
               AND confidence > 0.25
             """,
-            (faktor_decay, faktor_decay, kode_proyek, f"-{int(hari_threshold)} days"),
+            (
+                faktor_decay,
+                faktor_decay,
+                kode_proyek,
+                f"-{int(hari_threshold)} days",
+                f"-{int(interval_decay_hari)} days",
+            ),
         )
         return cur.rowcount or 0
     except sqlite3.Error as exc:
@@ -180,7 +195,10 @@ def perbarui_log_pembelajaran(conn: sqlite3.Connection, kode_proyek: str) -> dic
 
 
 def simpan_arsip_deduplikasi(
-    conn: sqlite3.Connection, kode_proyek: str, item: dict[str, Any]
+    conn: sqlite3.Connection,
+    kode_proyek: str,
+    item: dict[str, Any],
+    sync_vektor: bool = True,
 ) -> dict[str, Any]:
     """INSERT/UPDATE satu solusi dengan aturan deduplikasi deterministik, vector embedding, & auto-supersede."""
     tags_baru = normalisasi_tag(item.get("tag_masalah"))
@@ -211,7 +229,8 @@ def simpan_arsip_deduplikasi(
             (kode_proyek, tag_final, solusi),
         )
         new_id = int(cur.lastrowid)
-        simpan_vektor_solusi(conn, new_id, tag_final, solusi)
+        if sync_vektor:
+            simpan_vektor_solusi(conn, new_id, tag_final, solusi)
         try:
             conn.execute(
                 "INSERT OR IGNORE INTO relasi_solusi (source_id, target_id, relasi) VALUES (?, ?, 'SUPERSEDED')",
@@ -237,12 +256,14 @@ def simpan_arsip_deduplikasi(
         row_id = int(row["id"])
         conn.execute(
             """
-            UPDATE laci_arsip SET tag_masalah = ?, solusi_paten = ?, waktu_dibuat = CURRENT_TIMESTAMP
+            UPDATE laci_arsip
+            SET tag_masalah = ?, solusi_paten = ?, embedding_backend = NULL, waktu_dibuat = CURRENT_TIMESTAMP
             WHERE id = ?
             """,
             (", ".join(gabungan), solusi_gabungan, row_id),
         )
-        simpan_vektor_solusi(conn, row_id, ", ".join(gabungan), solusi_gabungan)
+        if sync_vektor:
+            simpan_vektor_solusi(conn, row_id, ", ".join(gabungan), solusi_gabungan)
 
         supersedes_id = item.get("supersedes_id")
         if supersedes_id and int(supersedes_id) != row_id:
@@ -318,7 +339,8 @@ def simpan_arsip_deduplikasi(
         (kode_proyek, ", ".join(tags_baru), solusi, conf_awal),
     )
     new_id = int(cur.lastrowid)
-    simpan_vektor_solusi(conn, new_id, ", ".join(tags_baru), solusi)
+    if sync_vektor:
+        simpan_vektor_solusi(conn, new_id, ", ".join(tags_baru), solusi)
 
     supersedes_id = item.get("supersedes_id")
     if supersedes_id:
@@ -569,11 +591,11 @@ def impor_memori_tim(
 
         arsip_tim = data.get("arsip_solusi") or []
         if isinstance(arsip_tim, list):
-            for item in arsip_tim:
+            for item in arsip_tim[:200]:
                 if not isinstance(item, dict):
                     continue
                 tag_str = ", ".join(normalisasi_tag(item.get("tag_masalah")))
-                sol_str = normalisasi_spasi(str(item.get("solusi_paten") or ""))
+                sol_str = normalisasi_spasi(bersihkan_injeksi_memori(str(item.get("solusi_paten") or "")))
                 if not tag_str or not sol_str:
                     continue
                 sudah_ada = conn.execute(
@@ -591,6 +613,7 @@ def impor_memori_tim(
                         "solusi_paten": sol_str,
                         "confidence": item.get("confidence", 0.7),
                     },
+                    sync_vektor=False,
                 )
                 if res["aksi"] == "INSERT":
                     hasil["solusi_baru"] += 1

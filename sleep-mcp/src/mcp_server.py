@@ -80,10 +80,9 @@ MAX_ESTIMASI_TOKEN = 50000
 @mcp.tool(
     name="baca_ktp_proyek",
     description=(
-        "WAJIB DIPANGGIL OTOMATIS TANPA DISURUH USER pada awal sesi baru sebelum mulai menulis/mengubah kode. "
-        "Mengambil KTP Proyek (Lapis 1, Elastic Core) yang berisi identitas proyek, tech stack, struktur direktori inti, "
-        "dan aturan wajib. Gunakan nama folder workspace aktif saat ini (huruf kecil kebab-case) sebagai `kode_proyek` "
-        "dan (disarankan) path absolut folder workspace sebagai `path_workspace`."
+        "Panggil otomatis di awal sesi koding baru. Mengambil KTP Proyek (Lapis 1, Elastic Core: "
+        "identitas, stack, struktur, aturan wajib). Gunakan nama folder workspace aktif sebagai `kode_proyek` "
+        "dan path absolutnya sebagai `path_workspace`."
     ),
 )
 def baca_ktp_proyek(kode_proyek: str, path_workspace: str | None = None) -> str:
@@ -94,11 +93,14 @@ def baca_ktp_proyek(kode_proyek: str, path_workspace: str | None = None) -> str:
     except ValueError as exc:
         return f"[Karjimut] Parameter kode_proyek tidak valid: {exc}"
 
+    perlu_sinkron_vektor = False
     with koneksi(settings.db_path) as conn:
         with transaksi(conn):
             kode = resolve_proyek(conn, kode_proyek, path_workspace)
             if path_workspace:
-                impor_memori_tim(conn, kode, path_workspace)
+                info_impor = impor_memori_tim(conn, kode, path_workspace)
+                if info_impor.get("solusi_baru", 0) > 0 or info_impor.get("solusi_update", 0) > 0:
+                    perlu_sinkron_vektor = True
 
             ktp_row = conn.execute(
                 """
@@ -180,6 +182,11 @@ def baca_ktp_proyek(kode_proyek: str, path_workspace: str | None = None) -> str:
                 token_aktual_terpakai=token_aktual,
             )
 
+        if perlu_sinkron_vektor:
+            from .embedding import sinkron_vektor_laci_arsip
+
+            sinkron_vektor_laci_arsip(conn, limit=50)
+
     return respons
 
 
@@ -220,15 +227,9 @@ def resource_ktp_proyek(kode_proyek: str) -> str:
 @mcp.tool(
     name="titip_catatan_kerja",
     description=(
-        "WAJIB DIPANGGIL OTOMATIS TANPA DISURUH USER setiap kali kamu selesai membuat fitur, mengedit kode, "
-        "mengubah skema/konfigurasi, atau memperbaiki bug. Menyimpan ringkasan aksi ke antrean mentah Karjimut "
-        "untuk dikonsolidasi otomatis pada fase idle. Gunakan nama folder workspace aktif saat ini sebagai `kode_proyek` "
-        "dan (disarankan) path absolut folder workspace sebagai `path_workspace` agar memori tidak tertukar saat folder "
-        "di-rename atau ada dua folder bernama sama. "
-        "FORMAT RINGKASAN (agar memori proyek akurat): tulis dalam bahasa Indonesia, padat, dan bila relevan gunakan "
-        "penanda berikut: 'Identitas: <fungsi proyek dalam 1 kalimat>. Stack: <teknologi>. Struktur: <direktori inti>. "
-        "Aturan: <aturan wajib baru>. Solusi: <solusi bug yang BERHASIL, maks 2 kalimat> #tag-gejala #tag-kedua'. "
-        "Jangan menempelkan stack trace penuh; cukup nama error dan solusi akhirnya."
+        "Panggil otomatis setiap selesai membuat fitur, mengedit kode, atau memperbaiki bug. "
+        "Menyimpan ringkasan padat ke antrean konsolidasi idle. Format opsional: "
+        "'Identitas: ... Stack: ... Struktur: ... Aturan: ... Solusi: <maks 2 kalimat> #tag1 #tag2'."
     ),
 )
 def titip_catatan_kerja(
@@ -299,10 +300,8 @@ def titip_catatan_kerja(
 @mcp.tool(
     name="cari_laci_solusi",
     description=(
-        "WAJIB DIPANGGIL OTOMATIS TANPA DISURUH USER setiap kali kamu menemui error terminal, kegagalan build/test, "
-        "atau stack trace exception. Mencari solusi konkret di Laci Arsip (Lapis 2) berbasis SQLite FTS5 BM25 "
-        "sebelum melakukan trial-and-error mandiri. Gunakan nama folder workspace aktif saat ini sebagai `kode_proyek` "
-        "dan (disarankan) path absolut folder workspace sebagai `path_workspace`."
+        "Panggil otomatis saat menemui error terminal, kegagalan build/test, atau exception. "
+        "Mencari solusi teruji di Laci Arsip (Lapis 2, Hybrid BM25 + Vector RRF) sebelum trial-and-error."
     ),
 )
 def cari_laci_solusi(kode_proyek: str, kata_kunci: str, path_workspace: str | None = None) -> str:
@@ -368,10 +367,8 @@ def cari_laci_solusi(kode_proyek: str, kata_kunci: str, path_workspace: str | No
 @mcp.tool(
     name="nilai_solusi",
     description=(
-        "Memberikan umpan balik (feedback loop) pembelajaran mandiri pada solusi di Laci Arsip (Lapis 2). "
-        "Panggil tool ini setelah mencoba solusi dari `cari_solusi` / `cari_laci_solusi` dengan parameter `berhasil=True` "
-        "jika error teratasi, atau `berhasil=False` jika solusi tersebut gagal. "
-        "Tindakan ini akan menaikkan/menurunkan confidence score solusi dan memperbarui metrik self-assessment."
+        "Beri feedback (`berhasil=True/False`) pada `id_solusi` dari `cari_laci_solusi` untuk memperbarui "
+        "confidence score dan metrik self-assessment."
     ),
 )
 def nilai_solusi(
@@ -435,29 +432,13 @@ def nilai_solusi(
 
 
 # ---------------------------------------------------------------------------
-# 5. Customer-Friendly MCP Aliases (Core Proyek, Simpan Catatan, Cari Solusi)
+# 6. Fungsi Alias Python Internal (Tanpa duplikasi skema @mcp.tool agar hemat token konteks)
 # ---------------------------------------------------------------------------
-@mcp.tool(
-    name="baca_core_proyek",
-    description=(
-        "WAJIB DIPANGGIL OTOMATIS TANPA DISURUH USER di awal sesi koding baru. Mengambil Core Proyek "
-        "(Lapis 1, Elastic Core) yang memuat identitas proyek, stack teknologi, struktur direktori inti, "
-        "dan aturan wajib. Gunakan nama folder workspace aktif sebagai `kode_proyek`."
-    ),
-)
 def baca_core_proyek(kode_proyek: str, path_workspace: str | None = None) -> str:
     """Customer-friendly alias untuk membaca Core Proyek (Lapis 1)."""
     return baca_ktp_proyek(kode_proyek=kode_proyek, path_workspace=path_workspace)
 
 
-@mcp.tool(
-    name="simpan_catatan_kerja",
-    description=(
-        "WAJIB DIPANGGIL OTOMATIS TANPA DISURUH USER setiap kali selesai membuat fitur, mengedit kode, "
-        "mengubah konfigurasi, atau memperbaiki bug. Menyimpan ringkasan aksi kerja untuk dikonsolidasi "
-        "otomatis pada fase idle berikutnya. Gunakan nama folder workspace aktif sebagai `kode_proyek`."
-    ),
-)
 def simpan_catatan_kerja(
     kode_proyek: str,
     ringkasan_aksi: str,
@@ -473,14 +454,6 @@ def simpan_catatan_kerja(
     )
 
 
-@mcp.tool(
-    name="cari_solusi",
-    description=(
-        "WAJIB DIPANGGIL OTOMATIS TANPA DISURUH USER setiap kali menemui error terminal, kegagalan build/test, "
-        "atau exception. Mencari solusi paten di Bank Solusi (Lapis 2) berbasis SQLite FTS5 BM25. "
-        "Gunakan nama folder workspace aktif sebagai `kode_proyek`."
-    ),
-)
 def cari_solusi(kode_proyek: str, kata_kunci: str, path_workspace: str | None = None) -> str:
     """Customer-friendly alias untuk mencari solusi paten di Bank Solusi."""
     return cari_laci_solusi(

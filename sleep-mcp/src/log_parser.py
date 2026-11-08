@@ -72,6 +72,14 @@ _RE_ATURAN_MARKER = re.compile(
     r"^\s*(aturan(\s+baru)?|rule|kesepakatan|konvensi|mandat|standar|ketentuan)\s*(\d+)?\s*[:\-]\s*", re.I
 )
 _RE_ATURAN_KATA = re.compile(r"\b(wajib|harus|dilarang|jangan|tidak boleh|selalu|must|never|always)\b", re.I)
+_RE_NARASI_CHANGELOG = re.compile(
+    r"\b(?:commit\s+[0-9a-f]{6,}|log\s*#\d+|\d+\s+unit\s+test|lulus\s+100%|passed\s+100%|"
+    r"berhasil\s+di-?(?:push|commit|rilis|deploy|hapus|bersihkan|sinkronkan)|"
+    r"rilis\s+v\d+\.\d+|versi\s+saat\s+ini\s+v?\d+\.\d+|bump\s+version|"
+    r"audit\s+menyeluruh|workspace\s+dibersihkan|file\s+sampah)\b",
+    re.I,
+)
+MAX_ATURAN_KTP = 12
 _RE_PROMPT_INJECTION = re.compile(
     r"\b(abaikan\s+(?:semua\s+)?instruksi|ignore\s+(?:all\s+)?(?:previous|prior|above)\s+instructions|"
     r"disregard\s+(?:all\s+)?(?:previous|prior)\s+instructions|"
@@ -95,7 +103,7 @@ _RE_STATUS_NON_SOLUSI = re.compile(
     re.I,
 )
 _RE_INDIKATOR_MEKANISME = re.compile(
-    r"\b(?:dengan|via|melalui|menggunakan|memakai|pada|ke|untuk\s+mencegah|agar|"
+    r"\b(?:dengan|via|melalui|gunakan|menggunakan|memakai|pada|ke|untuk\s+mencegah|agar|"
     r"tambahkan|menambahkan|tingkatkan|meningkatkan|atur|mengatur|ubah|mengubah|"
     r"aktifkan|mengaktifkan|ganti|mengganti|jalankan|menjalankan|terapkan|menerapkan|"
     r"perbarui|memperbarui|konfigurasi|parameter|header|middleware|pragma|lock|locking|"
@@ -445,17 +453,18 @@ def _kata_kunci_aturan(aturan: str) -> set[str]:
 
 def gabung_aturan(aturan_lama: list[str], aturan_baru: list[str]) -> list[str]:
     """Incremental merge aturan: aturan lama dipertahankan, aturan baru yang mirip
-    (Jaccard kata >= 0.6) menggantikan versi lamanya di posisi yang sama."""
-    hasil = [a for a in aturan_lama if a]
+    (Jaccard kata >= 0.55) menggantikan versi lamanya di posisi yang sama,
+    dan narasi changelog/milestone disaring agar KTP tidak membengkak."""
+    hasil = [a for a in aturan_lama if a and not _RE_NARASI_CHANGELOG.search(a)]
     for baru in aturan_baru:
-        if not baru:
+        if not baru or _RE_NARASI_CHANGELOG.search(baru):
             continue
         kunci_baru = _kata_kunci_aturan(baru)
         indeks_mirip = -1
         for i, lama in enumerate(hasil):
             kunci_lama = _kata_kunci_aturan(lama)
             if kunci_baru and kunci_lama and (
-                jaccard_similarity(kunci_baru, kunci_lama) >= 0.6 or kunci_baru <= kunci_lama
+                jaccard_similarity(kunci_baru, kunci_lama) >= 0.55 or kunci_baru <= kunci_lama
             ):
                 indeks_mirip = i
                 break
@@ -463,6 +472,8 @@ def gabung_aturan(aturan_lama: list[str], aturan_baru: list[str]) -> list[str]:
             hasil[indeks_mirip] = baru
         else:
             hasil.append(baru)
+    if len(hasil) > MAX_ATURAN_KTP:
+        hasil = hasil[-MAX_ATURAN_KTP:]
     return hasil
 
 

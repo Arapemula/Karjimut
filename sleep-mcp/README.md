@@ -6,7 +6,7 @@
 
 <p align="center">
   <strong>The Autonomous Long-Term Memory Engine for AI Coding Agents</strong><br>
-  <em>Stop LLM Amnesia. Cut Token Costs by up to 90%. Keep Cursor, Claude Code, and Antigravity Aligned Forever.</em>
+  <em>Stop LLM Amnesia. Cut Active Context Token Overhead by up to 86%. Keep Cursor, Claude Code, and Antigravity Aligned Across Sessions.</em>
 </p>
 
 <p align="center">
@@ -103,26 +103,34 @@ You don't need to remind your AI agent to use Karjimut. With the workspace rules
 
 ---
 
+## 📊 Empirical Evaluation & Benchmark Results
+
+All metrics are measured deterministically via `tests/benchmark.py` using `tiktoken` (`cl100k_base`) and `time.perf_counter()` without synthetic or hardcoded baselines:
+
+| Evaluation Metric | Empirical Result | Methodology |
+| :--- | :--- | :--- |
+| **Active Context Window Efficiency** | **86.86%** | Measured across 5 multi-step coding sessions (40 steps) against cumulative transcript replay |
+| **Net Token Savings (Full Overhead)** | **57.22% (+15,699 tokens)** | Includes full deduction of Sleep Consolidation tokens + `.cursorrules` + 4 MCP tool schemas; Break-Even Point reached at **Session 2** |
+| **Rule Retention & Unlearning** | **100.0% (10/10)** | 9 active architectural rules retained + 1 deprecated rule (`Basic Auth`) cleanly unlearned |
+| **Changelog Noise Rejection** | **100.0%** | Filters release version notes, file cleanups, and test pass logs out of KTP architectural rules |
+| **Hybrid Retrieval Precision@1 / MRR** | **100.0% / 1.0000** | Evaluated across $N=15$ bilingual (ID/EN) stack trace, natural language, and tag queries |
+| **Out-of-Domain False Positive Rate** | **0.0% (10/10 rejected)** | Tested against $N=10$ out-of-domain & cross-project negative queries (e.g., `No module named ruff`) |
+
+---
+
 ## 📂 Repository Structure
 
 ```text
 Karjimut/
 |-- README.md                       # Official product documentation & Quick Start
-|-- GEMINI.md                       # Autonomous Vibecoder Rule (Antigravity IDE)
-|-- .cursorrules                    # Autonomous Vibecoder Rule (Cursor & Windsurf)
-|-- .agents/rules/sleep-mcp-auto.md # Universal Agent Bootstrap Rule
+|-- .cursorrules                    # Compact Vibecoder Rule (Cursor & Windsurf)
+|-- .agents/rules/sleep-mcp-auto.md # Compact Agent Bootstrap Rule (Antigravity / Gemini)
 |-- sleep-mcp/
+    |-- pyproject.toml              # PyPI package configuration (karjimut)
+    |-- src/                        # Core engine (MCP server, SQLite WAL + sqlite-vec, GUI)
+    |-- tests/                      # Automated pytest suite (31 tests) & empirical benchmark
     |-- assets/                     # Official brand logos, banners, and app icons
-    |   |-- karjimut_banner.png
-    |   |-- karjimut_logo.png
-    |   |-- karjimut.ico
-    |-- rules_template/             # Starter templates for new workspaces
-        |-- .cursorrules
-        |-- antigravity_rules.md
 ```
-
-> **Distribution Architecture:**  
-> Karjimut is engineered as a high-performance, standalone package. The core engine (MCP server, native GUI, SQLite WAL vector store, and background watcher) is delivered directly via verified binary packages.
 
 ---
 

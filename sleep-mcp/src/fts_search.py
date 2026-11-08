@@ -66,9 +66,11 @@ STOPWORDS: frozenset[str] = frozenset(
         "lagi", "muncul", "terjadi", "jadi", "atau", "juga", "sudah", "belum", "akan",
         "bisa", "dapat", "karena", "oleh", "sebuah", "seperti", "masih", "selalu", "aku",
         "saya", "kami", "kita", "nya", "lalu", "kemudian", "setelah", "sebelum", "tolong",
-        "the", "a", "an", "is", "are", "was", "of", "to", "in", "on", "at", "for", "and",
-        "or", "not", "when", "with", "from", "by", "be", "it", "this", "that", "while",
-        "near", "match",
+        "the", "a", "an", "is", "are", "was", "were", "of", "to", "in", "on", "at", "for",
+        "and", "or", "not", "no", "named", "cannot", "can", "could", "would", "should",
+        "does", "did", "has", "have", "had", "into", "out", "up", "down", "over", "under",
+        "again", "most", "recent", "call", "last", "when", "with", "from", "by", "be",
+        "it", "this", "that", "while", "near", "match",
     }
 )
 
@@ -79,7 +81,11 @@ GENERIC_NOISE_TOKENS: frozenset[str] = frozenset(
         "error", "errors", "bug", "bugs", "bug-fix", "exception", "exceptions",
         "failed", "failure", "fatal", "gagal", "masalah", "issue", "issues",
         "problem", "warning", "info", "debug", "fix", "fixed", "solusi",
-        "status", "code", "kode", "line", "file", "app", "aplikasi", "sistem",
+        "status", "code", "kode", "line", "lines", "file", "files", "app", "aplikasi", "sistem",
+        "module", "modulenotfounderror", "importerror", "traceback", "runtimeerror",
+        "valueerror", "typeerror", "keyerror", "attributeerror", "indexerror",
+        "nameerror", "syntaxerror", "char", "character", "function", "method",
+        "class", "object", "return", "found",
     }
 )
 
@@ -181,14 +187,57 @@ def _unit_pencocokan_spesifik(token_spesifik: list[str]) -> list[str]:
     return unit
 
 
+def _cocok_kata_batas(kandidat: str, teks_target: str) -> bool:
+    """Pencocokan berbasis batas kata (word boundary) agar token pendek tidak cocok di tengah kata lain."""
+    if not kandidat:
+        return False
+    if len(kandidat) >= 5:
+        pola = rf"(?<![0-9a-z_]){re.escape(kandidat)}"
+    else:
+        pola = rf"(?<![0-9a-z_]){re.escape(kandidat)}(?![0-9a-z_])"
+    return bool(re.search(pola, teks_target))
+
+
 def _cocok_unit_atau_sinonim(unit: str, teks_target: str) -> bool:
     """Memeriksa apakah unit atau sinonim teknis dwibahasanya ada pada teks_target."""
-    if unit in teks_target:
+    if _cocok_kata_batas(unit, teks_target):
         return True
     for sin in KAMUS_SINONIM_ID_EN.get(unit, ()):
-        if sin in teks_target:
+        if _cocok_kata_batas(sin, teks_target):
             return True
     return False
+
+
+AMBIGUOUS_SINGLE_TOKENS: frozenset[str] = frozenset(
+    {
+        "token",
+        "port",
+        "service",
+        "header",
+        "key",
+        "pool",
+        "status",
+        "code",
+        "client",
+        "server",
+        "data",
+        "type",
+        "value",
+        "object",
+        "invalid",
+        "unexpected",
+        "position",
+        "src",
+        "lib",
+        "app",
+        "main",
+        "test",
+        "tests",
+        "file",
+        "line",
+        "name",
+    }
+)
 
 
 def _hasil_memenuhi_relevansi(item: dict[str, Any], unit_spesifik: list[str]) -> bool:
@@ -198,13 +247,20 @@ def _hasil_memenuhi_relevansi(item: dict[str, Any], unit_spesifik: list[str]) ->
     tag_teks = str(item.get("tag_masalah", "")).lower()
     solusi_teks = str(item.get("solusi_paten", "")).lower()
     gabungan = f"{tag_teks} {solusi_teks}"
-    cocok_tag = sum(1 for u in unit_spesifik if _cocok_unit_atau_sinonim(u, tag_teks))
-    if cocok_tag >= 1:
+    unit_cocok_tag = [u for u in unit_spesifik if _cocok_unit_atau_sinonim(u, tag_teks)]
+    unit_cocok_total = [u for u in unit_spesifik if _cocok_unit_atau_sinonim(u, gabungan)]
+
+    if len(unit_cocok_total) >= 2:
         return True
-    cocok_total = sum(1 for u in unit_spesifik if _cocok_unit_atau_sinonim(u, gabungan))
+    if len(unit_cocok_tag) == 1:
+        # Jika query panjang (>= 3 unit spesifik) dan satu-satunya kata yang cocok adalah kata ambigu
+        # seperti 'token' pada 'SyntaxError: Unexpected token < in JSON', wajib ada kata pendukung lain
+        if len(unit_spesifik) >= 3 and unit_cocok_tag[0] in AMBIGUOUS_SINGLE_TOKENS:
+            return False
+        return True
     if len(unit_spesifik) >= 3:
-        return cocok_total >= 2
-    return cocok_total >= 1
+        return False
+    return len(unit_cocok_total) >= 1
 
 
 def ekspansi_token(token: str) -> list[str]:
@@ -254,7 +310,7 @@ def bangun_query_fts(kata_kunci: str, ekspansi: bool = True) -> str:
     return "{tag_masalah solusi_paten} : (" + ekspresi_or + ")"
 
 
-MAX_COSINE_DISTANCE = 0.45  # Ambang batas kemiripan kosinus (~0.55 similarity)
+MAX_COSINE_DISTANCE = 0.38  # Ambang batas kemiripan kosinus (~0.62 similarity)
 
 
 def _baris_ke_dict(row: sqlite3.Row, metode: str) -> dict[str, Any]:
@@ -337,9 +393,10 @@ def cari_vektor_solusi_conn(
         if not ada_tabel:
             return []
 
-        from .embedding import generate_embedding, vector_ke_bytes
+        from .embedding import generate_embedding, get_active_embedding_backend, vector_ke_bytes
 
         vec = generate_embedding(kata_kunci)
+        aktif_backend = get_active_embedding_backend()
         raw_bytes = vector_ke_bytes(vec)
         k_pool = max(50, int(limit) * 10)
 
@@ -353,12 +410,16 @@ def cari_vektor_solusi_conn(
             FROM laci_arsip_vec v
             JOIN laci_arsip a ON v.id = a.id
             WHERE v.embedding MATCH ?
-              AND v.id IN (SELECT id FROM laci_arsip WHERE kode_proyek = ?)
+              AND v.id IN (
+                  SELECT id FROM laci_arsip
+                  WHERE kode_proyek = ?
+                    AND (embedding_backend IS NULL OR embedding_backend = ?)
+              )
               AND v.k = ?
             ORDER BY v.distance ASC
             LIMIT ?
         """
-        rows = conn.execute(query_sql, (raw_bytes, kode_proyek, k_pool, int(limit))).fetchall()
+        rows = conn.execute(query_sql, (raw_bytes, kode_proyek, aktif_backend, k_pool, int(limit))).fetchall()
         hasil: list[dict[str, Any]] = []
         for r in rows:
             dist = float(r["skor_jarak_vektor"])
@@ -512,10 +573,20 @@ def cari_lintas_proyek(
 
         kandidat_proyek.sort(key=lambda x: x[0], reverse=True)
 
+        token_mentah = ekstrak_token_kata_kunci(kata_kunci)
+        ada_spesifik = any(t.lstrip("#") not in GENERIC_NOISE_TOKENS for t in token_mentah)
+        unit_spesifik = _unit_pencocokan_spesifik(saring_token_spesifik(token_mentah)) if ada_spesifik else []
+        if not unit_spesifik:
+            return []
+
         hasil_lintas: list[dict[str, Any]] = []
         for sim_skor, p_kode in kandidat_proyek[:3]:
             hasil = cari_solusi_fts_conn(conn, p_kode, kata_kunci, limit=limit, cari_eksternal=False)
             for h in hasil:
+                if not _hasil_memenuhi_relevansi(h, unit_spesifik):
+                    continue
+                if h.get("metode") == "VECTOR_COSINE" and float(h.get("skor_jarak_vektor") or 1.0) > 0.28:
+                    continue
                 item = dict(h)
                 item["lintas_proyek"] = True
                 item["proyek_asal"] = p_kode

@@ -111,21 +111,36 @@ def _tulis_jika_berubah(target: Path, konten: str) -> bool:
         return False
 
 
+def _bersihkan_blok_karjimut_dari_teks(teks: str) -> str:
+    """Menghapus blok aturan Karjimut dari teks markdown sambil mempertahankan isi milik pengguna."""
+    import re
+
+    hasil = re.sub(
+        r"<!--\s*KARJIMUT:START\s*-->.*?<!--\s*KARJIMUT:END\s*-->\s*",
+        "",
+        teks,
+        flags=re.S,
+    )
+    hasil = re.sub(
+        r"#\s*Karjimut Automatic Memory Rule.*?(?=\n#\s+(?!Karjimut\b)|\Z)",
+        "",
+        hasil,
+        flags=re.S,
+    )
+    return hasil.strip()
+
+
 def pasang_aturan_otomatis_global(verbose: bool = False, pasang_global: bool = False) -> None:
-    """Memasang aturan Tiga Mandat Otomatis (Zero-Prompt Vibecoder) di workspace (dan global hanya saat setup-ide)."""
+    """Memasang aturan Tiga Mandat Otomatis (Zero-Prompt Vibecoder) tanpa duplikasi lintas file."""
     rule_md_src = RULES_TEMPLATE_DIR / "antigravity_rules.md"
     cursor_src = RULES_TEMPLATE_DIR / ".cursorrules"
     if not rule_md_src.exists():
         return
 
     isi_rule = rule_md_src.read_text(encoding="utf-8")
-    isi_gemini_md = isi_rule
-    if isi_gemini_md.startswith("---"):
-        bagian = isi_gemini_md.split("---", 2)
-        if len(bagian) == 3:
-            isi_gemini_md = bagian[2].lstrip()
 
-    # 1. Pasang Global Rule di ~/.gemini hanya saat opt-in eksplisit (setup-ide)
+    # 1. Pasang Global Rule di ~/.gemini/config/rules/sleep-mcp-auto.md saat setup-ide
+    #    (dan bersihkan duplikat di ~/.gemini/GEMINI.md tanpa menghapus instruksi custom milik user)
     if pasang_global:
         try:
             gemini_home = Path.home() / ".gemini"
@@ -134,17 +149,15 @@ def pasang_aturan_otomatis_global(verbose: bool = False, pasang_global: bool = F
                 _tulis_jika_berubah(global_rule_file, isi_rule)
 
                 global_gemini_md = gemini_home / "GEMINI.md"
-                existing_raw = global_gemini_md.read_text(encoding="utf-8", errors="ignore") if global_gemini_md.exists() else ""
-                if not global_gemini_md.exists() or "karjimut" not in existing_raw.lower():
-                    existing = existing_raw.strip()
-                    gabungan = (existing + "\n\n" + isi_gemini_md).strip() + "\n" if existing else isi_gemini_md
-                    _tulis_jika_berubah(global_gemini_md, gabungan)
-                elif existing_raw.count("# Karjimut Automatic Memory Rule") > 1:
-                    _tulis_jika_berubah(global_gemini_md, isi_gemini_md)
+                if global_gemini_md.exists():
+                    existing_raw = global_gemini_md.read_text(encoding="utf-8", errors="ignore")
+                    if "karjimut" in existing_raw.lower():
+                        shutil.copyfile(global_gemini_md, global_gemini_md.with_suffix(".md.bak"))
+                        sisa_user = _bersihkan_blok_karjimut_dari_teks(existing_raw)
+                        _tulis_jika_berubah(global_gemini_md, (sisa_user + "\n") if sisa_user else "")
 
                 if verbose:
                     print(f"[Auto-Rule] Global Rule Antigravity terpasang di: {global_rule_file}")
-                    print(f"[Auto-Rule] Global GEMINI.md terpasang di: {global_gemini_md}")
         except Exception as exc:
             if verbose:
                 print(f"[Auto-Rule] Peringatan saat memasang global rule: {exc}")
@@ -153,11 +166,19 @@ def pasang_aturan_otomatis_global(verbose: bool = False, pasang_global: bool = F
     if not IS_INSTALLED_PACKAGE:
         try:
             workspace_root = ROOT_DIR.parent
-            _tulis_jika_berubah(workspace_root / "GEMINI.md", isi_gemini_md)
             if cursor_src.exists():
                 isi_cursor = cursor_src.read_text(encoding="utf-8")
                 _tulis_jika_berubah(workspace_root / ".cursorrules", isi_cursor)
             _tulis_jika_berubah(workspace_root / ".agents" / "rules" / "sleep-mcp-auto.md", isi_rule)
+            ws_gemini_md = workspace_root / "GEMINI.md"
+            if ws_gemini_md.exists():
+                raw_ws_gemini = ws_gemini_md.read_text(encoding="utf-8", errors="ignore")
+                if "karjimut" in raw_ws_gemini.lower():
+                    sisa_ws = _bersihkan_blok_karjimut_dari_teks(raw_ws_gemini)
+                    if sisa_ws:
+                        _tulis_jika_berubah(ws_gemini_md, sisa_ws + "\n")
+                    else:
+                        ws_gemini_md.unlink(missing_ok=True)
         except Exception:
             pass
 
@@ -400,26 +421,63 @@ def _get_mcp_server_config() -> dict[str, object]:
     }
 
 
+def _parse_json_toleran(raw: str) -> dict[str, object] | None:
+    """Mem-parsing JSON konfigurasi IDE secara aman (mendukung trailing comma sederhana).
+
+    Mengembalikan ``None`` bila JSON rusak agar file pengguna TIDAK PERNAH ditimpa dengan ``{}``.
+    """
+    import re
+
+    bersih = (raw or "").strip()
+    if not bersih:
+        return {}
+    try:
+        parsed = json.loads(bersih)
+        return parsed if isinstance(parsed, dict) else None
+    except Exception:
+        pass
+    try:
+        tanpa_komentar = re.sub(r"^\s*//.*$", "", bersih, flags=re.M)
+        tanpa_koma_akhir = re.sub(r",\s*([}\]])", r"\1", tanpa_komentar)
+        parsed = json.loads(tanpa_koma_akhir)
+        return parsed if isinstance(parsed, dict) else None
+    except Exception:
+        return None
+
+
 def _inject_mcp_into_json(config_path: Path, server_config: dict[str, object], server_name: str = "karjimut") -> bool:
-    """Menyuntikkan konfigurasi server MCP ke file JSON target tanpa merusak konfigurasi lain."""
+    """Menyuntikkan konfigurasi server MCP ke file JSON target tanpa merusak konfigurasi lain.
+
+    Jika file target sudah ada tetapi tidak dapat di-parse sebagai JSON objek yang sah,
+    fungsi ini membatalkan penulisan (return False) agar tidak menghapus konfigurasi pengguna,
+    serta membuat salinan cadangan ``.bak`` sebelum memodifikasi file yang ada.
+    """
     try:
         config_path.parent.mkdir(parents=True, exist_ok=True)
         data: dict[str, object] = {}
-        if config_path.exists():
-            try:
-                data = json.loads(config_path.read_text(encoding="utf-8"))
-            except Exception:
-                data = {}
-        if not isinstance(data, dict):
-            data = {}
+        file_lama_ada = config_path.exists()
+        if file_lama_ada:
+            raw_existing = config_path.read_text(encoding="utf-8", errors="replace")
+            parsed = _parse_json_toleran(raw_existing)
+            if parsed is None:
+                return False
+            data = parsed
 
         mcp_servers = data.get("mcpServers")
-        if not isinstance(mcp_servers, dict):
+        if mcp_servers is not None and not isinstance(mcp_servers, dict):
+            return False
+        if mcp_servers is None:
             mcp_servers = {}
             data["mcpServers"] = mcp_servers
 
         mcp_servers[server_name] = server_config
-        config_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        konten_baru = json.dumps(data, indent=2) + "\n"
+        if file_lama_ada:
+            try:
+                shutil.copyfile(config_path, config_path.with_suffix(config_path.suffix + ".bak"))
+            except Exception:
+                pass
+        config_path.write_text(konten_baru, encoding="utf-8")
         return True
     except Exception:
         return False
@@ -436,7 +494,6 @@ def auto_inject_mcp_ke_semua_ide(verbose: bool = True) -> list[str]:
       5. VS Code Cline & Roo Code (globalStorage mcp settings)
     """
     server_cfg = _get_mcp_server_config()
-    hentikan_proses_wrapper_terkunci(verbose=verbose)
     terinjeksi: list[str] = []
     home = Path.home()
     appdata = Path(os.environ.get("APPDATA", home / "AppData" / "Roaming"))
@@ -497,20 +554,14 @@ def auto_inject_mcp_ke_semua_ide(verbose: bool = True) -> list[str]:
 
             if rule_md_src.exists():
                 isi_rule = rule_md_src.read_text(encoding="utf-8")
-                isi_gemini_md = isi_rule
-                if isi_gemini_md.startswith("---"):
-                    bagian = isi_gemini_md.split("---", 2)
-                    if len(bagian) == 3:
-                        isi_gemini_md = bagian[2].lstrip()
                 _tulis_jika_berubah(gemini_home / "config" / "rules" / "sleep-mcp-auto.md", isi_rule)
                 global_gemini_md = gemini_home / "GEMINI.md"
-                existing_raw = global_gemini_md.read_text(encoding="utf-8", errors="ignore") if global_gemini_md.exists() else ""
-                if not global_gemini_md.exists() or "karjimut" not in existing_raw.lower():
-                    existing = existing_raw.strip()
-                    gabungan = (existing + "\n\n" + isi_gemini_md).strip() + "\n" if existing else isi_gemini_md
-                    _tulis_jika_berubah(global_gemini_md, gabungan)
-                elif existing_raw.count("# Karjimut Automatic Memory Rule") > 1:
-                    _tulis_jika_berubah(global_gemini_md, isi_gemini_md)
+                if global_gemini_md.exists():
+                    existing_raw = global_gemini_md.read_text(encoding="utf-8", errors="ignore")
+                    if "karjimut" in existing_raw.lower():
+                        shutil.copyfile(global_gemini_md, global_gemini_md.with_suffix(".md.bak"))
+                        sisa_user = _bersihkan_blok_karjimut_dari_teks(existing_raw)
+                        _tulis_jika_berubah(global_gemini_md, (sisa_user + "\n") if sisa_user else "")
             terinjeksi.append(f"Antigravity/Gemini ({agy_mcp_cfg})")
             if verbose:
                 print(f"  [Auto-Inject] [OK] Antigravity / Gemini CLI: {agy_mcp_cfg}")
