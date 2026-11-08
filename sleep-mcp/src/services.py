@@ -140,9 +140,11 @@ def simpan_ktp_manual(conn: sqlite3.Connection, kode_proyek: str, teks: str, max
 # Laci Arsip Solusi (CRUD) dengan Sinkronisasi Vektor & Pembelajaran
 # ---------------------------------------------------------------------------
 def tambah_solusi(conn: sqlite3.Connection, kode_proyek: str, tag_masalah: str, solusi_paten: str) -> int:
+    from .log_parser import bersihkan_injeksi_memori
+
     kode = normalisasi_kode_proyek(kode_proyek)
     tags = normalisasi_tag(tag_masalah)
-    solusi = batasi_kalimat(solusi_paten, 2)
+    solusi = batasi_kalimat(bersihkan_injeksi_memori(solusi_paten), 2)
     if not tags or not solusi:
         raise ValueError("Tag masalah dan isi solusi wajib diisi.")
     tag_str = ", ".join(tags)
@@ -165,15 +167,18 @@ def tambah_solusi(conn: sqlite3.Connection, kode_proyek: str, tag_masalah: str, 
                 simpan_vektor_solusi(conn, new_id, tag_str, solusi, precomputed_vec=pre_vec, backend=aktif_backend)
             except (sqlite3.Error, RuntimeError, ValueError, OSError) as exc:
                 logger.warning("Gagal menyinkronkan vektor untuk solusi baru #%d: %s", new_id, exc)
+    ekspor_memori_tim(conn, kode)
     return new_id
 
 
 def perbarui_solusi(
     conn: sqlite3.Connection, kode_proyek: str, solusi_id: int, tag_masalah: str, solusi_paten: str
 ) -> dict[str, Any]:
+    from .log_parser import bersihkan_injeksi_memori
+
     kode = normalisasi_kode_proyek(kode_proyek)
     tags = normalisasi_tag(tag_masalah)
-    solusi = batasi_kalimat(solusi_paten, 2)
+    solusi = batasi_kalimat(bersihkan_injeksi_memori(solusi_paten), 2)
     if not tags or not solusi:
         raise ValueError("Tag masalah dan isi solusi wajib diisi.")
     tag_str = ", ".join(tags)
@@ -201,6 +206,7 @@ def perbarui_solusi(
                 simpan_vektor_solusi(conn, sid, tag_str, solusi, precomputed_vec=pre_vec, backend=aktif_backend)
             except (sqlite3.Error, RuntimeError, ValueError, OSError) as exc:
                 logger.warning("Gagal memperbarui vektor untuk solusi #%d: %s", sid, exc)
+    ekspor_memori_tim(conn, kode)
     return {"id": sid, "kode_proyek": kode, "tag_masalah": tag_str, "solusi_paten": solusi}
 
 

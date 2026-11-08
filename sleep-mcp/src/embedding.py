@@ -254,17 +254,32 @@ def sinkron_vektor_laci_arsip(conn: Any, limit: int = 200) -> int:
         vecs = batch_embed(teks_list)
         aktif_backend = get_active_embedding_backend()
 
+        from .db import transaksi
+
         terproses = 0
-        for r, vec in zip(rows, vecs):
-            if simpan_vektor_solusi(
-                conn,
-                int(r["id"]),
-                r["tag_masalah"],
-                r["solusi_paten"],
-                precomputed_vec=vec,
-                backend=aktif_backend,
-            ):
-                terproses += 1
+        if getattr(conn, "in_transaction", False):
+            for r, vec in zip(rows, vecs):
+                if simpan_vektor_solusi(
+                    conn,
+                    int(r["id"]),
+                    r["tag_masalah"],
+                    r["solusi_paten"],
+                    precomputed_vec=vec,
+                    backend=aktif_backend,
+                ):
+                    terproses += 1
+        else:
+            with transaksi(conn):
+                for r, vec in zip(rows, vecs):
+                    if simpan_vektor_solusi(
+                        conn,
+                        int(r["id"]),
+                        r["tag_masalah"],
+                        r["solusi_paten"],
+                        precomputed_vec=vec,
+                        backend=aktif_backend,
+                    ):
+                        terproses += 1
         return terproses
     except Exception as exc:
         logger.debug("Sinkronisasi vektor laci arsip dilewati: %s", exc)

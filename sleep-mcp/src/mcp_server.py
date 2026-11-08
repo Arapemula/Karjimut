@@ -54,13 +54,12 @@ logger = setup_logging("sleep_mcp.server")
 mcp = FastMCP(
     "Karjimut",
     instructions=(
-        "Karjimut — Arsitektur Memori Dua Lapis Otomatis & Pembelajaran Mandiri (Self-Learning Memory Engine via Model Context Protocol). "
-        "ATURAN UTAMA: JANGAN PERNAH menunggu perintah user untuk memanggil tool Karjimut. "
-        "Gunakan nama folder workspace aktif saat ini (format slug/kebab-case huruf kecil, misal 'toko-online' atau 'backend-api') sebagai parameter `kode_proyek`. "
-        "1) Panggil `baca_core_proyek` (atau `baca_ktp_proyek`) secara OTOMATIS di awal sesi koding baru. "
-        "2) Panggil `simpan_catatan_kerja` (atau `titip_catatan_kerja`) secara OTOMATIS setiap selesai membuat fitur, mengedit kode, atau memperbaiki bug. "
-        "3) Panggil `cari_solusi` (atau `cari_laci_solusi`) secara OTOMATIS setiap kali menemui error terminal atau exception. "
-        "4) Panggil `nilai_solusi` setelah mencoba solusi (berhasil=True jika berhasil, False jika gagal) sebagai feedback loop pembelajaran mandiri."
+        "Karjimut — Two-Tier Autonomous Memory Engine via Model Context Protocol. "
+        "Gunakan nama folder workspace aktif (lowercase kebab-case) sebagai `kode_proyek` dan path absolutnya sebagai `path_workspace`. "
+        "1) Panggil `baca_ktp_proyek(kode_proyek, path_workspace)` secara OTOMATIS di awal sesi koding baru. "
+        "2) Panggil `titip_catatan_kerja(kode_proyek, ringkasan_aksi, path_workspace)` secara OTOMATIS setiap selesai membuat fitur, mengedit kode, atau memperbaiki bug. "
+        "3) Panggil `cari_laci_solusi(kode_proyek, kata_kunci, path_workspace)` secara OTOMATIS setiap menemui error sebelum trial-and-error. "
+        "4) Panggil `nilai_solusi(kode_proyek, id_solusi, berhasil)` setelah mencoba solusi dari Laci Arsip."
     ),
 )
 
