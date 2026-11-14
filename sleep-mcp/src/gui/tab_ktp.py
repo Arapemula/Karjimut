@@ -6,7 +6,7 @@ from typing import Any
 
 import customtkinter as ctk
 
-from ..consolidator import rollback_ktp
+from ..consolidator import ekspor_memori_tim, rollback_ktp
 from ..db import koneksi, transaksi
 from ..services import simpan_ktp_manual
 from ..tokenizer_utils import hitung_token
@@ -360,6 +360,7 @@ class KtpTabMixin:
             with koneksi(self.settings.db_path) as conn:
                 with transaksi(conn):
                     info = rollback_ktp(conn, self.kode_proyek_aktif)
+                ekspor_memori_tim(conn, self.kode_proyek_aktif)
             self._ktp_dirty = False
             self._tampilkan_notif_ktp(
                 f"⏪ Rollback berhasil ke v{info['versi_ktp']} ({info['jumlah_token']} token)",

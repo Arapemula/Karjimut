@@ -132,8 +132,8 @@ def simpan_ktp_manual(conn: sqlite3.Connection, kode_proyek: str, teks: str, max
     kode = normalisasi_kode_proyek(kode_proyek)
     with transaksi(conn):
         info = terapkan_ktp_baru(conn, kode, teks, max_tokens)
-        ekspor_memori_tim(conn, kode)
-        return info
+    ekspor_memori_tim(conn, kode)
+    return info
 
 
 # ---------------------------------------------------------------------------
@@ -222,6 +222,7 @@ def hapus_solusi(conn: sqlite3.Connection, kode_proyek: str, solusi_id: int) -> 
             hapus_vektor_solusi(conn, sid)
         except (sqlite3.Error, RuntimeError, ValueError, OSError) as exc:
             logger.warning("Gagal menghapus vektor untuk solusi #%d: %s", sid, exc)
+    ekspor_memori_tim(conn, kode)
 
 
 def hitung_self_assessment_proyek(conn: sqlite3.Connection, kode_proyek: str) -> dict[str, Any]:
@@ -296,6 +297,7 @@ _TABEL_PROYEK = (
     "log_metrik_token",
     "peta_workspace",
     "log_pembelajaran",
+    "riwayat_feedback",
 )
 
 _SQL_COUNT_BY_PROYEK: dict[str, str] = {
@@ -305,6 +307,7 @@ _SQL_COUNT_BY_PROYEK: dict[str, str] = {
     "log_metrik_token": "SELECT COUNT(*) FROM log_metrik_token WHERE kode_proyek = ?",
     "peta_workspace": "SELECT COUNT(*) FROM peta_workspace WHERE kode_proyek = ?",
     "log_pembelajaran": "SELECT COUNT(*) FROM log_pembelajaran WHERE kode_proyek = ?",
+    "riwayat_feedback": "SELECT COUNT(*) FROM riwayat_feedback WHERE kode_proyek = ?",
 }
 
 _SQL_UPDATE_KODE_PROYEK: dict[str, str] = {
@@ -314,6 +317,7 @@ _SQL_UPDATE_KODE_PROYEK: dict[str, str] = {
     "log_metrik_token": "UPDATE log_metrik_token SET kode_proyek = ? WHERE kode_proyek = ?",
     "peta_workspace": "UPDATE peta_workspace SET kode_proyek = ? WHERE kode_proyek = ?",
     "log_pembelajaran": "UPDATE log_pembelajaran SET kode_proyek = ? WHERE kode_proyek = ?",
+    "riwayat_feedback": "UPDATE riwayat_feedback SET kode_proyek = ? WHERE kode_proyek = ?",
 }
 
 _SQL_DELETE_BY_PROYEK: dict[str, str] = {
@@ -323,6 +327,7 @@ _SQL_DELETE_BY_PROYEK: dict[str, str] = {
     "log_metrik_token": "DELETE FROM log_metrik_token WHERE kode_proyek = ?",
     "peta_workspace": "DELETE FROM peta_workspace WHERE kode_proyek = ?",
     "log_pembelajaran": "DELETE FROM log_pembelajaran WHERE kode_proyek = ?",
+    "riwayat_feedback": "DELETE FROM riwayat_feedback WHERE kode_proyek = ?",
 }
 
 

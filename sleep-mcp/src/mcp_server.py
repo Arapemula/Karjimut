@@ -46,6 +46,7 @@ from .db import (
 )
 from .fts_search import cari_solusi_fts_conn
 from .idle_watcher import IdleWatcherDaemon
+from .log_parser import bersihkan_injeksi_memori, normalisasi_spasi, sanitasi_pesan_error
 from .tokenizer_utils import hitung_token
 
 logger = setup_logging("sleep_mcp.server")
@@ -93,14 +94,32 @@ def baca_ktp_proyek(kode_proyek: str, path_workspace: str | None = None) -> str:
         return f"[Karjimut] Parameter kode_proyek tidak valid: {exc}"
 
     perlu_sinkron_vektor = False
+    peringatan_tim = ""
     with koneksi(settings.db_path) as conn:
         with transaksi(conn):
             kode = resolve_proyek(conn, kode_proyek, path_workspace)
-            if path_workspace:
-                info_impor = impor_memori_tim(conn, kode, path_workspace)
-                if info_impor.get("solusi_baru", 0) > 0 or info_impor.get("solusi_update", 0) > 0:
-                    perlu_sinkron_vektor = True
 
+        # Operasi I/O sistem berkas (baca/tulis team_memory.json & scan manifest) dijalankan
+        # DI LUAR transaksi BEGIN IMMEDIATE agar tidak menahan write-lock SQLite.
+        if path_workspace:
+            info_impor = impor_memori_tim(conn, kode, path_workspace)
+            if info_impor.get("solusi_baru", 0) > 0 or info_impor.get("solusi_update", 0) > 0:
+                perlu_sinkron_vektor = True
+            peringatan_tim = str(info_impor.get("peringatan_keamanan") or "").strip()
+
+        ktp_row = conn.execute(
+            """
+            SELECT ringkasan_inti, jumlah_token, versi_ktp, waktu_update
+            FROM ktp_proyek
+            WHERE kode_proyek = ?
+            """,
+            (kode,),
+        ).fetchone()
+
+        if ktp_row is None and path_workspace:
+            auto_bootstrap_workspace(conn, kode, path_workspace)
+
+        with transaksi(conn):
             ktp_row = conn.execute(
                 """
                 SELECT ringkasan_inti, jumlah_token, versi_ktp, waktu_update
@@ -109,17 +128,6 @@ def baca_ktp_proyek(kode_proyek: str, path_workspace: str | None = None) -> str:
                 """,
                 (kode,),
             ).fetchone()
-
-            if ktp_row is None and path_workspace:
-                auto_bootstrap_workspace(conn, kode, path_workspace)
-                ktp_row = conn.execute(
-                    """
-                    SELECT ringkasan_inti, jumlah_token, versi_ktp, waktu_update
-                    FROM ktp_proyek
-                    WHERE kode_proyek = ?
-                    """,
-                    (kode,),
-                ).fetchone()
 
             # Hitung total token mentah setara dari log yang sudah berstatus processed
             token_mentah_row = conn.execute(
@@ -171,6 +179,8 @@ def baca_ktp_proyek(kode_proyek: str, path_workspace: str | None = None) -> str:
                         f"#{r['id']}: {str(r['isi_log']).splitlines()[0][:100]}" for r in pending_rows
                     )
                     respons += f"\n[Hot-Buffer Pending ({total_pending} catatan): {cuplikan}]"
+            if peringatan_tim:
+                respons += f"\n{peringatan_tim}"
             token_aktual = hitung_token(respons)
 
             catat_metrik(
@@ -367,7 +377,7 @@ def cari_laci_solusi(kode_proyek: str, kata_kunci: str, path_workspace: str | No
     name="nilai_solusi",
     description=(
         "Beri feedback (`berhasil=True/False`) pada `id_solusi` dari `cari_laci_solusi` untuk memperbarui "
-        "confidence score dan metrik self-assessment."
+        "confidence score, menyimpan `catatan` evaluasi ke Laci Arsip & riwayat feedback, dan memperbarui metrik self-assessment."
     ),
 )
 def nilai_solusi(
@@ -377,12 +387,18 @@ def nilai_solusi(
     catatan: str | None = None,
     path_workspace: str | None = None,
 ) -> str:
-    """Feedback loop untuk evaluasi solusi: menaikkan/menurunkan confidence dan mencatat hit/miss."""
+    """Feedback loop untuk evaluasi solusi: memperbarui confidence, hit/miss, dan menyimpan catatan evaluasi."""
     settings = get_settings()
     try:
         normalisasi_kode_proyek(kode_proyek)
     except ValueError as exc:
         return f"[Karjimut Feedback] Parameter kode_proyek tidak valid: {exc}"
+
+    catatan_bersih = ""
+    if catatan is not None and str(catatan).strip():
+        catatan_bersih = normalisasi_spasi(
+            bersihkan_injeksi_memori(sanitasi_pesan_error(str(catatan)))
+        )[:400]
 
     with koneksi(settings.db_path) as conn:
         with transaksi(conn):
@@ -415,18 +431,33 @@ def nilai_solusi(
             conn.execute(
                 """
                 UPDATE laci_arsip
-                SET confidence = ?, hit_count = ?, miss_count = ?, last_hit = CURRENT_TIMESTAMP, is_stale = ?
+                SET confidence = ?,
+                    hit_count = ?,
+                    miss_count = ?,
+                    last_hit = CURRENT_TIMESTAMP,
+                    is_stale = ?,
+                    catatan_evaluasi = COALESCE(NULLIF(?, ''), catatan_evaluasi)
                 WHERE id = ?
                 """,
-                (conf_baru, hit_baru, miss_baru, is_stale_baru, int(id_solusi)),
+                (conf_baru, hit_baru, miss_baru, is_stale_baru, catatan_bersih, int(id_solusi)),
+            )
+
+            conn.execute(
+                """
+                INSERT INTO riwayat_feedback
+                    (solusi_id, kode_proyek, berhasil, confidence_sebelum, confidence_sesudah, catatan)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (int(id_solusi), kode, 1 if berhasil else 0, conf_lama, conf_baru, catatan_bersih or None),
             )
 
             # Catat snapshot evaluasi terbaru ke log pembelajaran
             perbarui_log_pembelajaran(conn, kode)
 
+    info_catatan = f" | Catatan: {catatan_bersih}" if catatan_bersih else ""
     return (
         f"[Karjimut Feedback #{id_solusi}] Status: {status_teks} | "
-        f"Confidence: {conf_lama} -> {conf_baru} | Hits: {hit_baru} | Misses: {miss_baru}"
+        f"Confidence: {conf_lama} -> {conf_baru} | Hits: {hit_baru} | Misses: {miss_baru}{info_catatan}"
     )
 
 

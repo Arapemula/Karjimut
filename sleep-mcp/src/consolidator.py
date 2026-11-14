@@ -18,14 +18,19 @@ from dataclasses import asdict, dataclass, field
 from typing import Any, Callable
 
 from .archive_manager import (
+    ambil_team_secret,
+    audit_berkas_team_memory,
     auto_bootstrap_workspace,
     ekspor_memori_tim,
     gabung_solusi_paten,
+    hitung_signature_tim,
     impor_memori_tim,
     kompaksi_antrean_lama,
     perbarui_log_pembelajaran,
     simpan_arsip_deduplikasi,
     terapkan_memory_decay,
+    validasi_skema_team_memory,
+    verifikasi_signature_tim,
 )
 from .config import (
     AKTIVITAS_SLEEP,
@@ -382,6 +387,8 @@ __all__ = [
     "_RE_SOLUSI_KATA",
     "_RE_SOLUSI_MARKER",
     "ambil_konteks",
+    "ambil_team_secret",
+    "audit_berkas_team_memory",
     "auto_bootstrap_workspace",
     "bangun_tag_gejala",
     "bersihkan_injeksi_memori",
@@ -392,6 +399,7 @@ __all__ = [
     "ekstrak_json",
     "gabung_aturan",
     "gabung_solusi_paten",
+    "hitung_signature_tim",
     "identitas_bermakna",
     "impor_memori_tim",
     "jaccard_similarity",
@@ -415,4 +423,6 @@ __all__ = [
     "terapkan_memory_decay",
     "urai_ktp",
     "validasi_output_distiller",
+    "validasi_skema_team_memory",
+    "verifikasi_signature_tim",
 ]

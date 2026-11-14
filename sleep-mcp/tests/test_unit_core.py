@@ -700,7 +700,7 @@ def test_gui_key_detector_and_env_sync(tmp_path: Path, monkeypatch: pytest.Monke
     d_gem = deteksi_api_key("AIzaSyD1234567890abcdefghijklmnop")
     assert d_gem.valid is True
     assert d_gem.provider == "gemini"
-    assert d_gem.model_name in ("gemini-3.5-flash", "gemini-3.8-flash")
+    assert d_gem.model_name == "gemini-3.5-flash"
     assert "Google Gemini" in d_gem.badge_text
 
     d_gem_aq = deteksi_api_key("AQ.Ab1234567890abcdefghijklmnopqrstuvwxyz")
@@ -733,7 +733,7 @@ def test_gui_key_detector_and_env_sync(tmp_path: Path, monkeypatch: pytest.Monke
     d_oai = deteksi_api_key("sk-proj-1234567890abcdefghijklmnop")
     assert d_oai.valid is True
     assert d_oai.provider == "openai"
-    assert d_oai.model_name in ("gpt-4o-mini", "gpt-6-luna")
+    assert d_oai.model_name == "gpt-4o-mini"
 
     # 6. Self-healing model selector jika model utama didepresiasi provider
     terpilih = pilih_model_terbaik("groq", "llama-3.3-70b-versatile", ["openai/gpt-oss-120b", "openai/gpt-oss-20b"])
@@ -778,3 +778,119 @@ def test_gui_key_detector_and_env_sync(tmp_path: Path, monkeypatch: pytest.Monke
         assert m["t_aktif_mcp"] == 45
         assert m["metrik_a_tercapai"] is True
         assert m["bep_tercapai"] is True
+
+
+def test_elastic_core_rule_retention_and_urai_ktp_resilience(monkeypatch: pytest.MonkeyPatch):
+    """Regresi Elastic Core (>12 aturan), override KTP_MAX_RULES, dan ketahanan parsing Aturan:."""
+    from src.ktp_manager import susun_ktp_terbatas, urai_ktp
+    from src.log_parser import MAX_ATURAN_KTP, gabung_aturan
+
+    # 1. Elastic Core (KTP_MAX_TOKENS=0, KTP_MAX_RULES=0) mempertahankan seluruh 15 aturan
+    monkeypatch.setenv("KTP_MAX_TOKENS", "0")
+    monkeypatch.setenv("KTP_MAX_RULES", "0")
+    rules_15 = [
+        "Semua query PostgreSQL wajib memakai parameterized binding SQLAlchemy async.",
+        "Endpoint REST v2 menggunakan rate limiter Redis maksimal 100 request per menit.",
+        "Validasi webhook payment gateway wajib memeriksa tanda tangan HMAC-SHA256.",
+        "Autentikasi API menggunakan OAuth2 Bearer JWT dengan rotasi refresh token berkala.",
+        "Log produksi wajib diformat JSON terstruktur beserta X-Correlation-ID header.",
+        "Worker antrean Celery wajib mengaktifkan acks_late serta exponential backoff retry.",
+        "Skema migrasi Alembic tidak boleh dijalankan paralel tanpa advisory lock.",
+        "Semua berkas sensitif .env dan kunci privat dilarang masuk commit Git.",
+        "Asset gambar CDN dikompresi ke format WebP sebelum diunggah ke object storage.",
+        "Komponen frontend React wajib memisahkan custom hook fetching dari UI presentasi.",
+        "Timeout panggilan HTTP eksternal lewat httpx dibatasi maksimal sepuluh detik.",
+        "Transaksi mutasi saldo finansial harus membungkus row locking SELECT FOR UPDATE.",
+        "Penyimpanan SQLite multi-thread wajib memakai mode WAL dan busy_timeout 5000ms.",
+        "Endpoint kesehatan readiness probe wajib mengecek koneksi database dan cache.",
+        "Dokumentasi skema OpenAPI disinkronkan otomatis melalui model Pydantic ketat.",
+    ]
+    logs_15 = [{"id": i, "isi_log": f"Aturan: {r}", "waktu_masuk": "2026-11-13"} for i, r in enumerate(rules_15, 1)]
+
+    hasil_elastic = local_rule_based_distiller("elastic-app", "", [], logs_15, max_tokens=0)
+    parsed_elastic = urai_ktp(hasil_elastic["ktp_proyek_baru"], "elastic-app")
+    assert len(parsed_elastic["aturan"]) == 15
+
+    # 2. Mode bounded token tetap menghormati MAX_ATURAN_KTP (12) kecuali KTP_MAX_RULES disetel
+    hasil_bounded = local_rule_based_distiller("elastic-app", "", [], logs_15, max_tokens=500)
+    parsed_bounded = urai_ktp(hasil_bounded["ktp_proyek_baru"], "elastic-app")
+    assert len(parsed_bounded["aturan"]) == MAX_ATURAN_KTP
+
+    monkeypatch.setenv("KTP_MAX_RULES", "10")
+    assert len(gabung_aturan(rules_15[:8], rules_15[8:])) == 10
+
+    # 3. urai_ktp tangguh terhadap bagian berulang & urutan terbalik tanpa memecah prose 'menahan Aturan:'
+    ktp_kompleks = (
+        "Identitas: Layanan pembayaran aman yang menahan Aturan: tak bertanda tangan di batas tim. "
+        "Aturan: (1) Wajib validasi HMAC; (2) Jangan pernah menahan Aturan: tak bertanda tangan tanpa audit. "
+        "Stack: Python, FastAPI. Stack: SQLite. Struktur: src/. Struktur: tests/."
+    )
+    urai = urai_ktp(ktp_kompleks, "pay-app")
+    assert "menahan Aturan: tak bertanda tangan" in urai["identitas"]
+    assert urai["stack"] == ["Python", "FastAPI", "SQLite"]
+    assert urai["struktur"] == ["src/", "tests/"]
+    assert len(urai["aturan"]) == 2
+    assert "menahan Aturan: tak bertanda tangan" in urai["aturan"][1]
+
+    roundtrip = susun_ktp_terbatas("pay-app", urai["identitas"], urai["stack"], urai["struktur"], urai["aturan"], 0)
+    assert "SQLite" in roundtrip and len(urai_ktp(roundtrip, "pay-app")["aturan"]) == 2
+
+
+def test_credential_redaction_and_config_defaults_consistency(monkeypatch: pytest.MonkeyPatch):
+    """Regresi penyensoran kredensial modern & konsistensi default provider config/.env.example."""
+    from src.config import DEFAULT_BASE_URL_BY_PROVIDER, DEFAULT_MODEL_BY_PROVIDER, ENV_FILE, get_settings
+    from src.gui.key_detector import MODEL_DEFAULT
+    from src.log_parser import sanitasi_pesan_error
+
+    assert MODEL_DEFAULT is DEFAULT_MODEL_BY_PROVIDER
+
+    teks_rahasia = (
+        "Err: AIzaSyD1234567890abcdefghijklmnop | AQ.AbCdEfGh1234567890abcdef | "
+        "ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ1234 | github_pat_11AAAAA000000000000000000000 | "
+        "AKIAIOSFODNN7EXAMPLE | xoxb-1234567890-abcdef123456 | "
+        "https://admin:SuperSecretPass!@db.example.com:5432/prod | "
+        "Authorization: Bearer tok_live_98765 | Basic dXNlcjpwYXNz\n"
+        "-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEAtestkeydata\n-----END RSA PRIVATE KEY-----"
+    )
+    tersensor = sanitasi_pesan_error(teks_rahasia)
+    for rahasia in (
+        "AIzaSyD1234567890abcdefghijklmnop",
+        "AQ.AbCdEfGh1234567890abcdef",
+        "ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ1234",
+        "github_pat_11AAAAA000000000000000000000",
+        "AKIAIOSFODNN7EXAMPLE",
+        "xoxb-1234567890-abcdef123456",
+        "SuperSecretPass!",
+        "tok_live_98765",
+        "dXNlcjpwYXNz",
+        "MIIEowIBAAKCAQEAtestkeydata",
+    ):
+        assert rahasia not in tersensor
+    assert "https://admin:[REDACTED_SECRET]@db.example.com:5432/prod" in tersensor
+    assert "[REDACTED_SECRET]" in tersensor
+
+    # Pastikan kalimat teknis legitim tidak rusak oleh sensor Bearer/Basic
+    teks_aman = "Aturan: Semua endpoint wajib memakai OAuth2 Bearer JWT, bukan pengganti Basic Auth."
+    assert sanitasi_pesan_error(teks_aman) == teks_aman
+
+    # Konsistensi config get_settings untuk auto-inferred Groq/OpenRouter
+    monkeypatch.delenv("LLM_PROVIDER", raising=False)
+    monkeypatch.delenv("LLM_API_BASE_URL", raising=False)
+    monkeypatch.delenv("LLM_MODEL_NAME", raising=False)
+    monkeypatch.setenv("LLM_API_KEY", "gsk_test1234567890abcdefghij")
+    s_groq = get_settings()
+    assert s_groq.llm_provider == "openai"
+    assert s_groq.llm_api_base_url == DEFAULT_BASE_URL_BY_PROVIDER["groq"]
+    assert s_groq.llm_model_name == DEFAULT_MODEL_BY_PROVIDER["groq"]
+
+    # Konsistensi .env.example (root paket & src/.env.example untuk wheel PyPI)
+    env_example = ENV_FILE.parent / ".env.example"
+    src_env_example = ENV_FILE.parent / "src" / ".env.example"
+    if env_example.exists():
+        isi_ex = env_example.read_text(encoding="utf-8")
+        assert "KTP_MAX_RULES=0" in isi_ex
+        assert "LLM_PROVIDER=gemini" in isi_ex
+        assert "generativelanguage.googleapis.com" in isi_ex
+        assert "LLM_MODEL_NAME=gemini-3.5-flash" in isi_ex
+        if src_env_example.exists():
+            assert src_env_example.read_text(encoding="utf-8") == isi_ex

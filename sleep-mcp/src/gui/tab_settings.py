@@ -11,7 +11,14 @@ from pathlib import Path
 
 import customtkinter as ctk
 
-from ..config import IS_FROZEN, IS_INSTALLED_PACKAGE, PROJECT_ROOT, SRC_DIR, get_settings
+from ..config import (
+    DEFAULT_MODEL_BY_PROVIDER,
+    IS_FROZEN,
+    IS_INSTALLED_PACKAGE,
+    PROJECT_ROOT,
+    SRC_DIR,
+    get_settings,
+)
 from .i18n import get_current_language, t
 from .key_detector import (
     GOOGLE_AI_STUDIO_URL,
@@ -265,7 +272,10 @@ class SettingsTabMixin:
 
         self.entry_settings_model = ctk.CTkEntry(
             c_grid,
-            placeholder_text="deepseek-chat / llama3.2 / gemini-3.8-flash",
+            placeholder_text=(
+                f"deepseek-chat / {DEFAULT_MODEL_BY_PROVIDER['ollama']} / "
+                f"{DEFAULT_MODEL_BY_PROVIDER['gemini']}"
+            ),
             height=34,
             fg_color=BG_CARD,
             border_color="#CBDAD3",

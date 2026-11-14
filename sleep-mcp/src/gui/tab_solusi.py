@@ -254,20 +254,42 @@ class SolusiTabMixin:
         )
         self.lbl_solusi_notif.pack(anchor="w", padx=18, pady=(4, 8))
 
-    def _on_search_key_release(self, _event: object = None) -> None:
+    def _batalkan_debounce_cari(self) -> None:
+        job = getattr(self, "_search_debounce_job", None)
+        if job is not None:
+            try:
+                self.after_cancel(job)
+            except Exception:
+                pass
+            self._search_debounce_job = None
+
+    def _picu_refresh_cari(self) -> None:
+        if hasattr(self, "refresh_semua_data_async"):
+            self.refresh_semua_data_async(force_editor=False)
+        else:
+            self.refresh_semua_data(force_editor=False)
+
+    def _jalankan_cari_debounced(self) -> None:
+        self._search_debounce_job = None
         q = self.entry_search_solusi.get().strip()
         if q != self._search_query_aktif:
             self._search_query_aktif = q
-            self.refresh_semua_data(force_editor=False)
+            self._picu_refresh_cari()
+
+    def _on_search_key_release(self, _event: object = None) -> None:
+        self._batalkan_debounce_cari()
+        self._search_debounce_job = self.after(250, self._jalankan_cari_debounced)
 
     def _cari_solusi_klik(self) -> None:
+        self._batalkan_debounce_cari()
         self._search_query_aktif = self.entry_search_solusi.get().strip()
-        self.refresh_semua_data(force_editor=False)
+        self._picu_refresh_cari()
 
     def _reset_cari_solusi(self) -> None:
+        self._batalkan_debounce_cari()
         self.entry_search_solusi.delete(0, "end")
         self._search_query_aktif = ""
-        self.refresh_semua_data(force_editor=False)
+        self._picu_refresh_cari()
 
     def _render_tab_solusi(self, solusi_rows: list[dict[str, Any]]) -> None:
         for child in self.scroll_solusi.winfo_children():
@@ -408,7 +430,19 @@ class SolusiTabMixin:
                 anchor="w",
                 justify="left",
                 wraplength=480,
-            ).pack(anchor="w", fill="x", padx=12, pady=(0, 8))
+            ).pack(anchor="w", fill="x", padx=12, pady=(0, 6))
+
+            catatan_eval = str(item.get("catatan_evaluasi") or "").strip()
+            if catatan_eval:
+                ctk.CTkLabel(
+                    card,
+                    text=f"📝 Catatan: {catatan_eval}",
+                    font=ctk.CTkFont(size=11, slant="italic"),
+                    text_color=TEXT_SECONDARY,
+                    anchor="w",
+                    justify="left",
+                    wraplength=480,
+                ).pack(anchor="w", fill="x", padx=12, pady=(0, 6))
 
             bottom = ctk.CTkFrame(card, fg_color="transparent")
             bottom.pack(fill="x", padx=12, pady=(0, 8))

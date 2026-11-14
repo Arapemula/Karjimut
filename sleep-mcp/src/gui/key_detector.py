@@ -2,11 +2,11 @@
 
 Mendeteksi secara otomatis provider LLM, Base URL, dan Model Default hanya dari
 awalan (prefix) API Key yang ditempelkan pengguna:
-  - ``AIzaSy...`` / ``AIza...`` -> Google Gemini (``gemini-3.8-flash``)
-  - ``gsk_...``                 -> Groq (``openai/gpt-oss-20b``)
-  - ``sk-or-...``               -> OpenRouter (``openrouter/auto``)
-  - ``sk-ant-...``              -> Anthropic Claude (``claude-haiku-5-5``)
-  - ``sk-proj-...`` / ``sk-...``-> OpenAI (``gpt-6-luna``)
+  - ``AIzaSy...`` / ``AIza...`` / ``AQ....`` -> Google Gemini (``gemini-3.5-flash``)
+  - ``gsk_...``                             -> Groq (``openai/gpt-oss-20b``)
+  - ``sk-or-...``                           -> OpenRouter (``openrouter/auto``)
+  - ``sk-ant-...``                          -> Anthropic Claude (``claude-haiku-5-5``)
+  - ``sk-proj-...`` / ``sk-...``            -> OpenAI (``gpt-4o-mini``)
 
 Mendukung pula override opsional ``Custom Base URL & Model Name`` untuk endpoint
 mandiri (DeepSeek, Ollama lokal, vLLM, LM Studio).
@@ -20,19 +20,19 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from ..config import ENV_FILE, PROJECT_ROOT, SRC_DIR, get_settings
+from ..config import (
+    DEFAULT_BASE_URL_BY_PROVIDER,
+    DEFAULT_MODEL_BY_PROVIDER,
+    ENV_FILE,
+    PROJECT_ROOT,
+    SRC_DIR,
+    get_settings,
+)
 
 GOOGLE_AI_STUDIO_URL = "https://aistudio.google.com/app/apikey"
 
-# Model default per provider. ID model cepat usang, jadi nilai ini diverifikasi ke endpoint
-# list-models provider (lihat tes_koneksi_llm) dan otomatis diganti bila sudah tidak tersedia.
-MODEL_DEFAULT: dict[str, str] = {
-    "gemini": "gemini-3.5-flash",
-    "groq": "openai/gpt-oss-20b",
-    "openrouter": "openrouter/auto",
-    "anthropic": "claude-haiku-5-5",
-    "openai": "gpt-4o-mini",
-}
+# Re-export single source of truth dari config.py agar kompatibel mundur untuk test/pemanggil lama.
+MODEL_DEFAULT: dict[str, str] = DEFAULT_MODEL_BY_PROVIDER
 
 
 @dataclass(frozen=True)
@@ -77,7 +77,7 @@ def deteksi_api_key(
     if not kunci and c_url:
         url_lower = c_url.lower()
         if "11434" in url_lower and not url_lower.endswith("/v1"):
-            model = c_model or "llama3.2"
+            model = c_model or MODEL_DEFAULT["ollama"]
             return HasilDeteksiKey(
                 valid=True,
                 provider="ollama",
@@ -130,7 +130,7 @@ def deteksi_api_key(
     if kunci.startswith("AIza") or kunci.startswith("AQ.") or kunci.startswith("AQ"):
         provider = "gemini"
         provider_label = "Google Gemini"
-        base_url = c_url or "https://generativelanguage.googleapis.com/v1beta"
+        base_url = c_url or DEFAULT_BASE_URL_BY_PROVIDER["gemini"]
         if c_url and "/openai" in c_url.lower():
             provider = "openai"
         model = c_model or MODEL_DEFAULT["gemini"]
@@ -139,20 +139,20 @@ def deteksi_api_key(
     elif kunci.startswith("gsk_"):
         provider = "openai"
         provider_label = "Groq"
-        base_url = c_url or "https://api.groq.com/openai/v1"
+        base_url = c_url or DEFAULT_BASE_URL_BY_PROVIDER["groq"]
         model = c_model or MODEL_DEFAULT["groq"]
         label_model = model
         badge = f"Groq ({label_model})"
     elif kunci.startswith("sk-or-"):
         provider = "openai"
         provider_label = "OpenRouter"
-        base_url = c_url or "https://openrouter.ai/api/v1"
+        base_url = c_url or DEFAULT_BASE_URL_BY_PROVIDER["openrouter"]
         model = c_model or MODEL_DEFAULT["openrouter"]
         badge = f"OpenRouter ({model})"
     elif kunci.startswith("sk-ant-"):
         provider = "anthropic"
         provider_label = "Anthropic Claude"
-        base_url = c_url or "https://api.anthropic.com/v1"
+        base_url = c_url or DEFAULT_BASE_URL_BY_PROVIDER["anthropic"]
         model = c_model or MODEL_DEFAULT["anthropic"]
         label_model = model
         badge = f"Anthropic Claude ({label_model})"
@@ -170,14 +170,14 @@ def deteksi_api_key(
             badge = f"Custom Endpoint ({model})"
         else:
             provider_label = "OpenAI"
-            base_url = "https://api.openai.com/v1"
+            base_url = DEFAULT_BASE_URL_BY_PROVIDER["openai"]
             model = c_model or MODEL_DEFAULT["openai"]
             badge = f"OpenAI ({model})"
     else:
         # Prefix kustom (mis. DeepSeek tanpa sk-, TogetherAI, Mistral, vLLM, dsb.)
         provider = "openai"
         provider_label = "Custom / OpenAI-Compatible"
-        base_url = c_url or "https://api.openai.com/v1"
+        base_url = c_url or DEFAULT_BASE_URL_BY_PROVIDER["openai"]
         model = c_model or MODEL_DEFAULT["openai"]
         badge = f"{provider_label} ({model})"
 

@@ -128,7 +128,7 @@ Karjimut/
 |-- sleep-mcp/
     |-- pyproject.toml              # PyPI package configuration (karjimut)
     |-- src/                        # Core engine (MCP server, SQLite WAL + sqlite-vec, GUI)
-    |-- tests/                      # Automated pytest suite (31 tests) & empirical benchmark
+    |-- tests/                      # Automated pytest suite (43 tests) & empirical benchmark
     |-- assets/                     # Official brand logos, banners, and app icons
 ```
 

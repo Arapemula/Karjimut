@@ -57,7 +57,8 @@ def _migrasi_data_legacy_site_packages(user_dir: Path) -> None:
 
 # Mode aplikasi ter-bundle (PyInstaller .exe) atau paket PyPI (site-packages):
 # data (.env, database) disimpan di direktori user (~/.karjimut) atau di samping .exe.
-def _tentukan_project_root() -> Path:
+def tentukan_project_root() -> Path:
+    """Menentukan direktori root data/konfigurasi Karjimut sesuai mode eksekusi."""
     if getattr(sys, "frozen", False):
         exe_dir = Path(sys.executable).resolve().parent
         if (exe_dir / ".env").exists() or (exe_dir / "data").exists():
@@ -72,9 +73,43 @@ def _tentukan_project_root() -> Path:
     return SRC_DIR.parent
 
 
+_tentukan_project_root = tentukan_project_root
+
+APP_USER_MODEL_ID: str = "karjimut.desktop.v2"
+
+DEFAULT_BASE_URL_BY_PROVIDER: dict[str, str] = {
+    "gemini": "https://generativelanguage.googleapis.com/v1beta",
+    "openai": "https://api.openai.com/v1",
+    "anthropic": "https://api.anthropic.com/v1",
+    "groq": "https://api.groq.com/openai/v1",
+    "openrouter": "https://openrouter.ai/api/v1",
+    "ollama": "http://localhost:11434",
+}
+
+DEFAULT_MODEL_BY_PROVIDER: dict[str, str] = {
+    "gemini": "gemini-3.5-flash",
+    "groq": "openai/gpt-oss-20b",
+    "openrouter": "openrouter/auto",
+    "anthropic": "claude-haiku-5-5",
+    "openai": "gpt-4o-mini",
+    "ollama": "llama3.2",
+}
+
+
+def atur_app_user_model_id_windows(app_id: str = APP_USER_MODEL_ID) -> None:
+    """Mengatur Windows AppUserModelID agar ikon taskbar & launcher terkelompok rapi."""
+    if sys.platform != "win32":
+        return
+    try:
+        import ctypes
+
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(app_id)
+    except Exception:
+        pass
+
 
 IS_FROZEN: bool = bool(getattr(sys, "frozen", False))
-PROJECT_ROOT: Path = _tentukan_project_root()
+PROJECT_ROOT: Path = tentukan_project_root()
 ENV_FILE: Path = PROJECT_ROOT / ".env"
 
 if load_dotenv is not None and ENV_FILE.exists():
@@ -174,6 +209,10 @@ class Settings:
     fallback_local_on_llm_error: bool
     force_fallback_tokenizer: bool
     log_level: str
+    team_secret: str = ""
+    require_team_signature: bool = False
+    trust_unsigned_team_rules: bool = False
+    ktp_max_rules: int = 0
 
     @property
     def llm_aktif(self) -> bool:
@@ -189,35 +228,39 @@ class Settings:
         return bool(self.llm_api_key)
 
 
+def _resolve_provider_defaults(raw_prov: str, raw_key: str) -> tuple[str, str, str]:
+    """Menentukan `(wire_provider, default_base_url, default_model)` secara konsisten."""
+    prov = (raw_prov or "").strip().lower()
+    key = (raw_key or "").strip()
+    logical = prov
+    if not logical:
+        if key.startswith(("AIza", "AQ.", "AQ")):
+            logical = "gemini"
+        elif key.startswith("gsk_"):
+            logical = "groq"
+        elif key.startswith("sk-or-"):
+            logical = "openrouter"
+        elif key.startswith("sk-ant-"):
+            logical = "anthropic"
+        elif key.startswith("sk-"):
+            logical = "openai"
+        else:
+            logical = "gemini"
+
+    if logical in ("groq", "openrouter"):
+        return "openai", DEFAULT_BASE_URL_BY_PROVIDER[logical], DEFAULT_MODEL_BY_PROVIDER[logical]
+    if logical in ("gemini", "anthropic", "ollama"):
+        return logical, DEFAULT_BASE_URL_BY_PROVIDER[logical], DEFAULT_MODEL_BY_PROVIDER[logical]
+    wire = prov or "openai"
+    return wire, DEFAULT_BASE_URL_BY_PROVIDER["openai"], DEFAULT_MODEL_BY_PROVIDER["openai"]
+
+
 def get_settings() -> Settings:
     """Membaca konfigurasi terkini dari environment."""
     raw_db = _env_str("KARJIMUT_DB_PATH", "") or _env_str("SLEEP_MCP_DB_PATH", "data/sleep_mcp.db")
     raw_key = _env_str("LLM_API_KEY", "")
     raw_prov = _env_str("LLM_PROVIDER", "").lower()
-
-    # Auto-infer provider jika belum disetel eksplisit
-    if not raw_prov:
-        if raw_key.startswith("AIza") or raw_key.startswith("AQ.") or raw_key.startswith("AQ"):
-            raw_prov = "gemini"
-        elif raw_key.startswith("gsk_") or raw_key.startswith("sk-proj-") or (raw_key.startswith("sk-") and not raw_key.startswith("sk-ant-")):
-            raw_prov = "openai"
-        elif raw_key.startswith("sk-ant-"):
-            raw_prov = "anthropic"
-        else:
-            raw_prov = "gemini"
-
-    if raw_prov == "gemini":
-        default_base = "https://generativelanguage.googleapis.com/v1beta"
-        default_model = "gemini-3.5-flash"
-    elif raw_prov == "anthropic":
-        default_base = "https://api.anthropic.com/v1"
-        default_model = "claude-haiku-5-5"
-    elif raw_prov == "ollama":
-        default_base = "http://localhost:11434"
-        default_model = "llama3.2"
-    else:
-        default_base = "https://api.openai.com/v1"
-        default_model = "gpt-4o-mini"
+    wire_prov, default_base, default_model = _resolve_provider_defaults(raw_prov, raw_key)
 
     return Settings(
         db_path=_resolve_db_path(raw_db),
@@ -228,7 +271,7 @@ def get_settings() -> Settings:
         sleep_batch_limit=_env_int("SLEEP_BATCH_LIMIT", 200, minimum=1),
         working_window_seconds=_env_int("WORKING_WINDOW_SECONDS", 60, minimum=1),
         embedded_watcher_mcp=_env_bool("KARJIMUT_EMBEDDED_WATCHER", _env_bool("SLEEP_MCP_EMBEDDED_WATCHER", True)),
-        llm_provider=raw_prov,
+        llm_provider=wire_prov,
         llm_api_base_url=_env_str("LLM_API_BASE_URL", default_base).rstrip("/"),
         llm_api_key=raw_key,
         llm_model_name=_env_str("LLM_MODEL_NAME", default_model),
@@ -238,6 +281,10 @@ def get_settings() -> Settings:
         fallback_local_on_llm_error=_env_bool("FALLBACK_LOCAL_ON_LLM_ERROR", False),
         force_fallback_tokenizer=_env_bool("FORCE_FALLBACK_TOKENIZER", False),
         log_level=_env_str("LOG_LEVEL", "INFO").upper(),
+        team_secret=_env_str("KARJIMUT_TEAM_SECRET", ""),
+        require_team_signature=_env_bool("KARJIMUT_REQUIRE_TEAM_SIGNATURE", False),
+        trust_unsigned_team_rules=_env_bool("KARJIMUT_TRUST_UNSIGNED_TEAM_RULES", False),
+        ktp_max_rules=_env_int("KTP_MAX_RULES", 0, minimum=0),
     )
 
 

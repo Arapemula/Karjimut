@@ -30,6 +30,7 @@ from .log_parser import (
     _RE_STACK_MARKER,
     _RE_STRUKTUR_MARKER,
     _TAG_NON_SOLUSI,
+    _batas_aturan_aktif,
     _buang_hashtag,
     _gabung_unik,
     _hapus_aturan_usang,
@@ -57,6 +58,48 @@ from .tokenizer_utils import (
 _RE_LABEL_STACK = re.compile(r"\bStack\s*:\s*(.*?)(?=\s*\b(?:Struktur|Aturan)\s*:|$)", re.S)
 _RE_LABEL_STRUKTUR = re.compile(r"\bStruktur\s*:\s*(.*?)(?=\s*\b(?:Stack|Aturan)\s*:|$)", re.S)
 _RE_LABEL_ATURAN = re.compile(r"\bAturan(?:\s+wajib)?\s*:\s*(.*)$", re.S | re.I)
+_RE_KTP_SECTION = re.compile(
+    r"(?:^|[.!?;]\s+|\n\s*)(?P<lbl>Stack|Struktur|Aturan(?:\s+wajib)?)\s*:"
+    r"|\s+\b(?P<lbl_mid>Stack|Struktur)\s*:"
+    r"|\s+\b(?P<lbl_aturan_num>Aturan(?:\s+wajib)?)\s*:(?=\s*\(\d+\))",
+    re.S,
+)
+
+
+def _pecah_daftar_aturan(badan: str) -> list[str]:
+    """Memecah blok teks aturan menjadi daftar aturan utuh tanpa memotong koma/tanda kurung.
+
+    Juga menyatukan kembali fragmen kalimat yang sempat terpecah akibat penomoran/koma
+    di dalam kalimat atau tanda kurung (mis. ``(1) DILARANG mengakses; (2) Membaca; ...``).
+    """
+    teks = badan.strip()
+    if not teks:
+        return []
+    if re.search(r"\(\d+\)", teks):
+        mentah = re.split(r"\(\d+\)\s*", teks)
+    elif ";" in teks:
+        mentah = re.split(r";(?![^()]*\))\s*", teks)
+    else:
+        mentah = [teks]
+
+    hasil: list[str] = []
+    for item in mentah:
+        bersih = _rapikan_aturan(item)
+        if not bersih:
+            continue
+        kata = bersih.split()
+        kurung_belum_tutup = bool(hasil and hasil[-1].count("(") > hasil[-1].count(")"))
+        diawali_konjungsi_atau_pola = bool(
+            re.match(r"^(?:atau|dan|serta|maupun|or|and)\b", bersih, re.I)
+            or bersih.startswith("*.")
+        )
+        fragmen_pendek_tanpa_subjek = len(kata) < 3 and not _RE_ATURAN_KATA.search(bersih)
+        if hasil and (kurung_belum_tutup or diawali_konjungsi_atau_pola or fragmen_pendek_tanpa_subjek):
+            lanjutan = bersih[0].lower() + bersih[1:] if len(bersih) > 1 and not bersih[:2].isupper() else bersih
+            hasil[-1] = f"{hasil[-1].rstrip(' ,;.')}, {lanjutan}"
+        else:
+            hasil.append(bersih)
+    return hasil
 
 
 def urai_ktp(ktp: str, kode_proyek: str = "") -> dict[str, Any]:
@@ -70,12 +113,13 @@ def urai_ktp(ktp: str, kode_proyek: str = "") -> dict[str, Any]:
     teks = normalisasi_spasi(ktp)
     if not teks:
         return hasil
-    m_stack = _RE_LABEL_STACK.search(teks)
-    m_struktur = _RE_LABEL_STRUKTUR.search(teks)
-    m_aturan = _RE_LABEL_ATURAN.search(teks)
-    if m_stack or m_struktur or m_aturan:
-        posisi_label = [m.start() for m in (m_stack, m_struktur, m_aturan) if m]
-        identitas = teks[: min(posisi_label)].strip()
+    matches = list(_RE_KTP_SECTION.finditer(teks))
+    if matches:
+        pertama = matches[0]
+        start_pertama = next(
+            pertama.start(g) for g in ("lbl", "lbl_mid", "lbl_aturan_num") if pertama.group(g)
+        )
+        identitas = teks[:start_pertama].strip()
         identitas = (
             re.sub(rf"^Proyek\s+{re.escape(kode_proyek)}\s*:\s*", "", identitas, flags=re.I)
             if kode_proyek
@@ -83,17 +127,35 @@ def urai_ktp(ktp: str, kode_proyek: str = "") -> dict[str, Any]:
         )
         identitas = re.sub(r"^Proyek\s+[\w.-]+\s*:\s*", "", identitas, flags=re.I)
         hasil["identitas"] = identitas.strip().rstrip(".").strip()
-        if m_stack:
-            hasil["stack"] = _split_item(m_stack.group(1))
-        if m_struktur:
-            hasil["struktur"] = _split_item(m_struktur.group(1))
-        if m_aturan:
-            badan = m_aturan.group(1).strip()
-            if re.search(r"\(\d+\)", badan):
-                bagian = re.split(r"\(\d+\)\s*", badan)
-            else:
-                bagian = re.split(r";\s*", badan)
-            hasil["aturan"] = [_rapikan_aturan(b) for b in bagian if _rapikan_aturan(b)]
+
+        spans: list[tuple[int, int, str]] = []
+        for idx, m in enumerate(matches):
+            lbl_val = ""
+            for grp in ("lbl", "lbl_mid", "lbl_aturan_num"):
+                if m.group(grp):
+                    lbl_val = m.group(grp)
+                    break
+            next_start = len(teks)
+            if idx + 1 < len(matches):
+                nxt = matches[idx + 1]
+                next_start = next(
+                    nxt.start(g) for g in ("lbl", "lbl_mid", "lbl_aturan_num") if nxt.group(g)
+                )
+            nama_seksi = "aturan" if lbl_val.lower().startswith("aturan") else lbl_val.lower()
+            spans.append((m.end(), next_start, nama_seksi))
+
+        for awal, akhir, nama_seksi in spans:
+            isi_seksi = teks[awal:akhir].strip()
+            if not isi_seksi:
+                continue
+            if nama_seksi == "stack":
+                hasil["stack"] = _gabung_unik(hasil["stack"], _split_item(isi_seksi.rstrip(" .;")))
+            elif nama_seksi == "struktur":
+                hasil["struktur"] = _gabung_unik(hasil["struktur"], _split_item(isi_seksi.rstrip(" .;")))
+            elif nama_seksi == "aturan":
+                for rule in _pecah_daftar_aturan(isi_seksi):
+                    if rule and rule not in hasil["aturan"]:
+                        hasil["aturan"].append(rule)
         return hasil
 
     # Paragraf bebas: klasifikasi per kalimat
@@ -101,10 +163,7 @@ def urai_ktp(ktp: str, kode_proyek: str = "") -> dict[str, Any]:
     for kalimat in pecah_kalimat(teks):
         m_daftar = re.match(r"^(.*?\baturan\b[^:]*):\s*(.+)$", kalimat, re.I)
         if m_daftar:
-            for bagian in re.split(r"[;,]\s*", m_daftar.group(2)):
-                aturan = _rapikan_aturan(bagian)
-                if aturan:
-                    hasil["aturan"].append(aturan)
+            hasil["aturan"].extend(_pecah_daftar_aturan(m_daftar.group(2)))
             continue
         if _RE_ATURAN_KATA.search(kalimat):
             hasil["aturan"].append(_rapikan_aturan(kalimat))
@@ -330,7 +389,7 @@ def local_rule_based_distiller(
             pending_teks.append(isi)
 
     aturan_lama_aktif = _hapus_aturan_usang(aturan_lama_aktif, aturan_dihapus)
-    aturan = gabung_aturan(aturan_lama_aktif, aturan_baru)
+    aturan = gabung_aturan(aturan_lama_aktif, aturan_baru, max_aturan=_batas_aturan_aktif(max_tokens))
     ktp_baru = susun_ktp_terbatas(kode, identitas, stack, struktur, aturan, max_tokens)
     return {"ktp_proyek_baru": ktp_baru, "arsip_solusi": arsip_solusi}
 
@@ -417,5 +476,6 @@ def rollback_ktp(conn: sqlite3.Connection, kode_proyek: str) -> dict[str, Any]:
         "SELECT ringkasan_inti, ringkasan_sebelumnya, jumlah_token, versi_ktp FROM ktp_proyek WHERE kode_proyek = ?",
         (kode_proyek,),
     ).fetchone()
-    ekspor_memori_tim(conn, kode_proyek)
+    if not conn.in_transaction:
+        ekspor_memori_tim(conn, kode_proyek)
     return dict(hasil)

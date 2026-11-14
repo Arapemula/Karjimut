@@ -85,6 +85,7 @@ DDL_TABEL: tuple[str, ...] = (
         last_decay TIMESTAMP NULL,
         is_stale INTEGER NOT NULL DEFAULT 0,
         embedding_backend TEXT NULL,
+        catatan_evaluasi TEXT NULL,
         waktu_dibuat TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
     """,
@@ -154,6 +155,20 @@ DDL_TABEL: tuple[str, ...] = (
         waktu_catat TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
     """,
+    # 10. Riwayat feedback evaluasi solusi beserta catatan konteks pengguna/agent
+    """
+    CREATE TABLE IF NOT EXISTS riwayat_feedback (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        solusi_id INTEGER NOT NULL,
+        kode_proyek TEXT NOT NULL,
+        berhasil INTEGER NOT NULL,
+        confidence_sebelum REAL NOT NULL,
+        confidence_sesudah REAL NOT NULL,
+        catatan TEXT NULL,
+        waktu_catat TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (solusi_id) REFERENCES laci_arsip(id) ON DELETE CASCADE
+    );
+    """,
 )
 
 DDL_TRIGGER: tuple[str, ...] = (
@@ -188,6 +203,8 @@ DDL_INDEKS: tuple[str, ...] = (
     "CREATE INDEX IF NOT EXISTS idx_relasi_target ON relasi_solusi(target_id, relasi);",
     "CREATE INDEX IF NOT EXISTS idx_relasi_source ON relasi_solusi(source_id, relasi);",
     "CREATE INDEX IF NOT EXISTS idx_log_pembelajaran_proyek ON log_pembelajaran(kode_proyek);",
+    "CREATE INDEX IF NOT EXISTS idx_riwayat_feedback_solusi ON riwayat_feedback(solusi_id, waktu_catat);",
+    "CREATE INDEX IF NOT EXISTS idx_riwayat_feedback_proyek ON riwayat_feedback(kode_proyek);",
 )
 
 _init_lock = threading.Lock()
@@ -333,6 +350,8 @@ def _migrasi_skema_v2(conn: sqlite3.Connection) -> None:
             conn.execute("ALTER TABLE laci_arsip ADD COLUMN is_stale INTEGER NOT NULL DEFAULT 0;")
         if cols and "embedding_backend" not in cols:
             conn.execute("ALTER TABLE laci_arsip ADD COLUMN embedding_backend TEXT NULL;")
+        if cols and "catatan_evaluasi" not in cols:
+            conn.execute("ALTER TABLE laci_arsip ADD COLUMN catatan_evaluasi TEXT NULL;")
     except Exception as exc:
         logger.warning("Gagal migrasi kolom laci_arsip: %s", exc)
 

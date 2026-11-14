@@ -260,6 +260,7 @@ class AntreanTabMixin:
         antrean_rows: list[dict[str, Any]],
         metrik: dict[str, Any],
         status_siklus: dict[str, Any],
+        self_assessment: dict[str, Any] | None = None,
     ) -> None:
         ef_a = metrik["efisiensi_aktif_persen"]
         warna_a = PILL_SUCCESS_FG if metrik["metrik_a_tercapai"] else PILL_WARN_FG
@@ -289,8 +290,10 @@ class AntreanTabMixin:
 
         if hasattr(self, "lbl_metrik_c_val"):
             try:
-                with koneksi(self.settings.db_path) as conn:
-                    sa = hitung_self_assessment_proyek(conn, self.kode_proyek_aktif)
+                sa = self_assessment
+                if sa is None:
+                    with koneksi(self.settings.db_path) as conn:
+                        sa = hitung_self_assessment_proyek(conn, self.kode_proyek_aktif)
                 hr = float(sa.get("hit_rate_persen", sa.get("hit_rate", 0.0)))
                 avg_c = float(sa.get("avg_confidence", sa.get("avg_conf", 0.7)))
                 warna_c = "#059669" if hr >= 70.0 else ("#6D28D9" if hr >= 40.0 else "#D97706")

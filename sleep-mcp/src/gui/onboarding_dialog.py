@@ -16,6 +16,7 @@ from typing import Callable
 
 import customtkinter as ctk
 
+from ..config import DEFAULT_MODEL_BY_PROVIDER
 from .key_detector import (
     GOOGLE_AI_STUDIO_URL,
     HasilDeteksiKey,
@@ -286,7 +287,10 @@ class OnboardingDialog(ctk.CTkToplevel):
 
         self.entry_model = ctk.CTkEntry(
             custom_grid,
-            placeholder_text="Contoh: deepseek-chat / llama3.2 / gemini-3.8-flash",
+            placeholder_text=(
+                f"Contoh: deepseek-chat / {DEFAULT_MODEL_BY_PROVIDER['ollama']} / "
+                f"{DEFAULT_MODEL_BY_PROVIDER['gemini']}"
+            ),
             height=32,
             font=ctk.CTkFont(size=12),
             fg_color=BG_CARD,

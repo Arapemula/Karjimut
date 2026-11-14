@@ -13,6 +13,7 @@ Alur :func:`cari_solusi_fts`:
 
 from __future__ import annotations
 
+import math
 import re
 import sqlite3
 from typing import Any, Iterable
@@ -74,8 +75,10 @@ STOPWORDS: frozenset[str] = frozenset(
     }
 )
 
-# Istilah generik yang sering muncul di hampir semua laporan bug sehingga tidak boleh
-# memicu false-positive sendirian apabila query memiliki kata kunci teknis yang spesifik.
+# Kategori token struktural/exception standar bahasa pemrograman (Python built-in exceptions,
+# log levels, dan header stack trace standar) yang memiliki Document Frequency (DF) sangat tinggi
+# pada korpus error log sehingga memiliki nilai Inverse Document Frequency (IDF) mendekati nol.
+# Token ini dipertahankan sebagai fallback hanya bila query tidak memiliki identifier teknis spesifik.
 GENERIC_NOISE_TOKENS: frozenset[str] = frozenset(
     {
         "error", "errors", "bug", "bugs", "bug-fix", "exception", "exceptions",
@@ -127,6 +130,7 @@ QUERY_SQL_BM25 = """
            COALESCE(a.hit_count, 0) AS hit_count,
            COALESCE(a.miss_count, 0) AS miss_count,
            COALESCE(a.is_stale, 0) AS is_stale,
+           COALESCE(a.catatan_evaluasi, '') AS catatan_evaluasi,
            bm25(laci_arsip_fts) AS skor_bm25
     FROM laci_arsip_fts f
     JOIN laci_arsip a ON f.rowid = a.id
@@ -364,6 +368,7 @@ def cari_fallback_like(
                COALESCE(hit_count, 0) AS hit_count,
                COALESCE(miss_count, 0) AS miss_count,
                COALESCE(is_stale, 0) AS is_stale,
+               COALESCE(catatan_evaluasi, '') AS catatan_evaluasi,
                NULL AS skor_bm25, ({' + '.join(skor_parts)}) AS skor_like
         FROM laci_arsip
         WHERE kode_proyek = ? AND ({' OR '.join(where_parts)})
@@ -376,6 +381,65 @@ def cari_fallback_like(
         data = _baris_ke_dict(row, "LIKE_FALLBACK")
         data.pop("skor_like", None)
         hasil.append(data)
+    return hasil
+
+
+def _cari_vektor_terfilter_proyek(
+    conn: sqlite3.Connection,
+    kode_proyek: str,
+    aktif_backend: str,
+    query_vec: list[float],
+    limit: int,
+) -> list[dict[str, Any]]:
+    """Fallback jarak kosinus terlingkup ``kode_proyek`` saat pool KNN global ``sqlite-vec`` jenuh proyek lain."""
+    from .embedding import bytes_ke_vector
+
+    norm_q = math.sqrt(sum(x * x for x in query_vec))
+    if norm_q <= 0.0:
+        return []
+
+    rows = conn.execute(
+        """
+        SELECT a.id, a.kode_proyek, a.tag_masalah, a.solusi_paten, a.waktu_dibuat,
+               COALESCE(a.confidence, 0.7) AS confidence,
+               COALESCE(a.hit_count, 0) AS hit_count,
+               COALESCE(a.miss_count, 0) AS miss_count,
+               COALESCE(a.is_stale, 0) AS is_stale,
+               COALESCE(a.catatan_evaluasi, '') AS catatan_evaluasi,
+               v.embedding AS vec_blob
+        FROM laci_arsip a
+        JOIN laci_arsip_vec v ON v.id = a.id
+        WHERE a.kode_proyek = ?
+          AND (a.embedding_backend IS NULL OR a.embedding_backend = ?)
+        """,
+        (kode_proyek, aktif_backend),
+    ).fetchall()
+
+    dim = len(query_vec)
+    kandidat: list[tuple[float, sqlite3.Row]] = []
+    for r in rows:
+        blob = r["vec_blob"]
+        if not blob:
+            continue
+        vec_row = bytes_ke_vector(blob)
+        if len(vec_row) != dim:
+            continue
+        norm_v = math.sqrt(sum(y * y for y in vec_row))
+        if norm_v <= 0.0:
+            continue
+        dot = sum(x * y for x, y in zip(query_vec, vec_row))
+        cosine = max(-1.0, min(1.0, dot / (norm_q * norm_v)))
+        dist = 1.0 - cosine
+        if dist <= MAX_COSINE_DISTANCE:
+            kandidat.append((dist, r))
+
+    kandidat.sort(key=lambda pair: (pair[0], -int(pair[1]["id"])))
+    hasil: list[dict[str, Any]] = []
+    for dist, r in kandidat[: int(limit)]:
+        d = _baris_ke_dict(r, "VECTOR_COSINE")
+        d.pop("vec_blob", None)
+        d["skor_jarak_vektor"] = round(dist, 4)
+        hasil.append(d)
     return hasil
 
 
@@ -406,6 +470,7 @@ def cari_vektor_solusi_conn(
                    COALESCE(a.hit_count, 0) AS hit_count,
                    COALESCE(a.miss_count, 0) AS miss_count,
                    COALESCE(a.is_stale, 0) AS is_stale,
+                   COALESCE(a.catatan_evaluasi, '') AS catatan_evaluasi,
                    v.distance AS skor_jarak_vektor
             FROM laci_arsip_vec v
             JOIN laci_arsip a ON v.id = a.id
@@ -420,6 +485,11 @@ def cari_vektor_solusi_conn(
             LIMIT ?
         """
         rows = conn.execute(query_sql, (raw_bytes, kode_proyek, aktif_backend, k_pool, int(limit))).fetchall()
+        if len(rows) < int(limit):
+            total_row = conn.execute("SELECT COUNT(*) FROM laci_arsip_vec").fetchone()
+            total_vec = int(total_row[0]) if total_row else 0
+            if total_vec >= k_pool:
+                return _cari_vektor_terfilter_proyek(conn, kode_proyek, aktif_backend, vec, int(limit))
         hasil: list[dict[str, Any]] = []
         for r in rows:
             dist = float(r["skor_jarak_vektor"])

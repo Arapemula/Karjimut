@@ -17,6 +17,8 @@ import argparse
 import importlib.util
 import json
 import os
+import re
+import secrets
 import shutil
 import subprocess
 import sys
@@ -40,44 +42,25 @@ elif hasattr(sys.stderr, "reconfigure"):
     except Exception:
         pass
 
-if sys.platform == "win32":
-    try:
-        import ctypes
-
-        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("karjimut.desktop.v2")
-    except Exception:
-        pass
-
 IS_FROZEN = bool(getattr(sys, "frozen", False))
 _HERE = Path(__file__).resolve().parent
 PACKAGE_DIR = _HERE if (_HERE / "config.py").exists() else (_HERE / "src")
 IS_INSTALLED_PACKAGE = any(
     p.lower() in ("site-packages", "dist-packages") for p in PACKAGE_DIR.parts
 )
-
-
-def _tentukan_root_dir() -> Path:
-    if IS_FROZEN:
-        exe_dir = Path(sys.executable).resolve().parent
-        if (exe_dir / ".env").exists() or (exe_dir / "data").exists():
-            return exe_dir
-        if (exe_dir.parent / ".env").exists() or (exe_dir.parent / "data").exists():
-            return exe_dir.parent
-        return exe_dir
-    if IS_INSTALLED_PACKAGE:
-        user_dir = Path.home() / ".karjimut"
-        user_dir.mkdir(parents=True, exist_ok=True)
-        return user_dir
-    return PACKAGE_DIR.parent
-
-
-ROOT_DIR = _tentukan_root_dir()
 if not IS_FROZEN:
     parent_pkg = str(PACKAGE_DIR.parent)
     if parent_pkg not in sys.path:
         sys.path.insert(0, parent_pkg)
 
-ENV_FILE = ROOT_DIR / ".env"
+try:
+    from .config import ENV_FILE, PROJECT_ROOT, atur_app_user_model_id_windows
+except ImportError:
+    from src.config import ENV_FILE, PROJECT_ROOT, atur_app_user_model_id_windows
+
+atur_app_user_model_id_windows()
+
+ROOT_DIR = PROJECT_ROOT
 ENV_EXAMPLE = (
     ROOT_DIR / ".env.example"
     if (ROOT_DIR / ".env.example").exists()
@@ -308,13 +291,7 @@ def jalankan_desktop_gui() -> None:
         except Exception:
             pass
 
-    if sys.platform == "win32":
-        try:
-            import ctypes
-
-            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("karjimut.desktop.v2")
-        except Exception:
-            pass
+    atur_app_user_model_id_windows()
 
     pastikan_lingkungan_siap()
     try:
@@ -445,7 +422,12 @@ def _parse_json_toleran(raw: str) -> dict[str, object] | None:
         return None
 
 
-def _inject_mcp_into_json(config_path: Path, server_config: dict[str, object], server_name: str = "karjimut") -> bool:
+def _inject_mcp_into_json(
+    config_path: Path,
+    server_config: dict[str, object],
+    server_name: str = "karjimut",
+    dry_run: bool = False,
+) -> bool:
     """Menyuntikkan konfigurasi server MCP ke file JSON target tanpa merusak konfigurasi lain.
 
     Jika file target sudah ada tetapi tidak dapat di-parse sebagai JSON objek yang sah,
@@ -453,7 +435,6 @@ def _inject_mcp_into_json(config_path: Path, server_config: dict[str, object], s
     serta membuat salinan cadangan ``.bak`` sebelum memodifikasi file yang ada.
     """
     try:
-        config_path.parent.mkdir(parents=True, exist_ok=True)
         data: dict[str, object] = {}
         file_lama_ada = config_path.exists()
         if file_lama_ada:
@@ -466,6 +447,9 @@ def _inject_mcp_into_json(config_path: Path, server_config: dict[str, object], s
         mcp_servers = data.get("mcpServers")
         if mcp_servers is not None and not isinstance(mcp_servers, dict):
             return False
+        if dry_run:
+            return True
+        config_path.parent.mkdir(parents=True, exist_ok=True)
         if mcp_servers is None:
             mcp_servers = {}
             data["mcpServers"] = mcp_servers
@@ -483,7 +467,7 @@ def _inject_mcp_into_json(config_path: Path, server_config: dict[str, object], s
         return False
 
 
-def auto_inject_mcp_ke_semua_ide(verbose: bool = True) -> list[str]:
+def auto_inject_mcp_ke_semua_ide(verbose: bool = True, dry_run: bool = False) -> list[str]:
     """Mendeteksi otomatis seluruh IDE yang terpasang dan menyuntikkan konfigurasi MCP + Global Rules.
     
     Target yang didukung:
@@ -497,6 +481,7 @@ def auto_inject_mcp_ke_semua_ide(verbose: bool = True) -> list[str]:
     terinjeksi: list[str] = []
     home = Path.home()
     appdata = Path(os.environ.get("APPDATA", home / "AppData" / "Roaming"))
+    prefix_log = "[Dry-Run]" if dry_run else "[Auto-Inject]"
 
     # 1. Claude Desktop
     claude_candidates = [
@@ -506,31 +491,32 @@ def auto_inject_mcp_ke_semua_ide(verbose: bool = True) -> list[str]:
     ]
     for cp in claude_candidates:
         if cp.parent.exists() or cp.exists():
-            if _inject_mcp_into_json(cp, server_cfg):
+            if _inject_mcp_into_json(cp, server_cfg, dry_run=dry_run):
                 terinjeksi.append(f"Claude Desktop ({cp})")
                 if verbose:
-                    print(f"  [Auto-Inject] [OK] Claude Desktop: {cp}")
+                    print(f"  {prefix_log} [OK] Claude Desktop: {cp}")
             break
 
     # 2. Cursor (Global MCP & Global Rules)
     cursor_mcp = home / ".cursor" / "mcp.json"
-    if _inject_mcp_into_json(cursor_mcp, server_cfg):
-        rule_md_src = RULES_TEMPLATE_DIR / "antigravity_rules.md"
-        if rule_md_src.exists():
-            isi_rule = rule_md_src.read_text(encoding="utf-8")
-            cursor_rule_dir = home / ".cursor" / "rules"
-            _tulis_jika_berubah(cursor_rule_dir / "karjimut.mdc", isi_rule)
+    if _inject_mcp_into_json(cursor_mcp, server_cfg, dry_run=dry_run):
+        if not dry_run:
+            rule_md_src = RULES_TEMPLATE_DIR / "antigravity_rules.md"
+            if rule_md_src.exists():
+                isi_rule = rule_md_src.read_text(encoding="utf-8")
+                cursor_rule_dir = home / ".cursor" / "rules"
+                _tulis_jika_berubah(cursor_rule_dir / "karjimut.mdc", isi_rule)
         terinjeksi.append(f"Cursor ({cursor_mcp})")
         if verbose:
-            print(f"  [Auto-Inject] [OK] Cursor (Global MCP & Rules): {cursor_mcp}")
+            print(f"  {prefix_log} [OK] Cursor (Global MCP & Rules): {cursor_mcp}")
 
     # 3. Windsurf
     windsurf_cfg = home / ".codeium" / "windsurf" / "mcp_config.json"
     if windsurf_cfg.parent.exists() or windsurf_cfg.exists():
-        if _inject_mcp_into_json(windsurf_cfg, server_cfg):
+        if _inject_mcp_into_json(windsurf_cfg, server_cfg, dry_run=dry_run):
             terinjeksi.append(f"Windsurf ({windsurf_cfg})")
             if verbose:
-                print(f"  [Auto-Inject] [OK] Windsurf: {windsurf_cfg}")
+                print(f"  {prefix_log} [OK] Windsurf: {windsurf_cfg}")
 
     # 4. Antigravity / Gemini CLI
     gemini_home = home / ".gemini"
@@ -538,33 +524,34 @@ def auto_inject_mcp_ke_semua_ide(verbose: bool = True) -> list[str]:
     if gemini_home.exists():
         try:
             agy_mcp_cfg = gemini_home / "config" / "mcp_config.json"
-            _inject_mcp_into_json(agy_mcp_cfg, server_cfg)
+            _inject_mcp_into_json(agy_mcp_cfg, server_cfg, dry_run=dry_run)
 
-            legacy_agy_mcp = gemini_home / "antigravity" / "mcp_config.json"
-            if legacy_agy_mcp.parent.exists() and not legacy_agy_mcp.is_symlink():
-                try:
-                    if not legacy_agy_mcp.exists() or legacy_agy_mcp.resolve() != agy_mcp_cfg.resolve():
-                        _inject_mcp_into_json(legacy_agy_mcp, server_cfg)
-                except Exception:
-                    pass
+            if not dry_run:
+                legacy_agy_mcp = gemini_home / "antigravity" / "mcp_config.json"
+                if legacy_agy_mcp.parent.exists() and not legacy_agy_mcp.is_symlink():
+                    try:
+                        if not legacy_agy_mcp.exists() or legacy_agy_mcp.resolve() != agy_mcp_cfg.resolve():
+                            _inject_mcp_into_json(legacy_agy_mcp, server_cfg, dry_run=dry_run)
+                    except Exception:
+                        pass
 
-            gemini_cli_settings = gemini_home / "settings.json"
-            if gemini_cli_settings.exists():
-                _inject_mcp_into_json(gemini_cli_settings, server_cfg)
+                gemini_cli_settings = gemini_home / "settings.json"
+                if gemini_cli_settings.exists():
+                    _inject_mcp_into_json(gemini_cli_settings, server_cfg, dry_run=dry_run)
 
-            if rule_md_src.exists():
-                isi_rule = rule_md_src.read_text(encoding="utf-8")
-                _tulis_jika_berubah(gemini_home / "config" / "rules" / "sleep-mcp-auto.md", isi_rule)
-                global_gemini_md = gemini_home / "GEMINI.md"
-                if global_gemini_md.exists():
-                    existing_raw = global_gemini_md.read_text(encoding="utf-8", errors="ignore")
-                    if "karjimut" in existing_raw.lower():
-                        shutil.copyfile(global_gemini_md, global_gemini_md.with_suffix(".md.bak"))
-                        sisa_user = _bersihkan_blok_karjimut_dari_teks(existing_raw)
-                        _tulis_jika_berubah(global_gemini_md, (sisa_user + "\n") if sisa_user else "")
+                if rule_md_src.exists():
+                    isi_rule = rule_md_src.read_text(encoding="utf-8")
+                    _tulis_jika_berubah(gemini_home / "config" / "rules" / "sleep-mcp-auto.md", isi_rule)
+                    global_gemini_md = gemini_home / "GEMINI.md"
+                    if global_gemini_md.exists():
+                        existing_raw = global_gemini_md.read_text(encoding="utf-8", errors="ignore")
+                        if "karjimut" in existing_raw.lower():
+                            shutil.copyfile(global_gemini_md, global_gemini_md.with_suffix(".md.bak"))
+                            sisa_user = _bersihkan_blok_karjimut_dari_teks(existing_raw)
+                            _tulis_jika_berubah(global_gemini_md, (sisa_user + "\n") if sisa_user else "")
             terinjeksi.append(f"Antigravity/Gemini ({agy_mcp_cfg})")
             if verbose:
-                print(f"  [Auto-Inject] [OK] Antigravity / Gemini CLI: {agy_mcp_cfg}")
+                print(f"  {prefix_log} [OK] Antigravity / Gemini CLI: {agy_mcp_cfg}")
         except Exception:
             pass
 
@@ -577,39 +564,46 @@ def auto_inject_mcp_ke_semua_ide(verbose: bool = True) -> list[str]:
     ]
     for label, vpath in vscode_exts:
         if vpath.parent.exists() or vpath.exists():
-            if _inject_mcp_into_json(vpath, server_cfg):
+            if _inject_mcp_into_json(vpath, server_cfg, dry_run=dry_run):
                 terinjeksi.append(f"{label} ({vpath})")
                 if verbose:
-                    print(f"  [Auto-Inject] [OK] {label}: {vpath}")
+                    print(f"  {prefix_log} [OK] {label}: {vpath}")
 
     return terinjeksi
 
 
-def tampilkan_setup_ide(target_dir: str | None = None) -> None:
+def tampilkan_setup_ide(target_dir: str | None = None, dry_run: bool = False) -> None:
     """Menyiapkan konfigurasi JSON MCP siap tempel, auto-inject ke seluruh IDE, & menyalin Rules."""
     pastikan_lingkungan_siap(auto_install=False)
-    pasang_aturan_otomatis_global(verbose=False, pasang_global=True)
+    if not dry_run:
+        pasang_aturan_otomatis_global(verbose=False, pasang_global=True)
     mcp_json = {"mcpServers": {"karjimut": _get_mcp_server_config()}}
 
     config_out = ROOT_DIR / "mcp_config_siap_pakai.json"
-    config_out.write_text(json.dumps(mcp_json, indent=2), encoding="utf-8")
+    if not dry_run:
+        config_out.write_text(json.dumps(mcp_json, indent=2), encoding="utf-8")
 
     print("\n" + "=" * 72)
     print("  KARJIMUT ZERO-SETUP AUTO-INJECTOR (IDE & AGENTS)")
     print("=" * 72)
-    print("Mendeteksi lingkungan IDE dan menyuntikkan MCP & Aturan Otomatis...\n")
-    terinjeksi = auto_inject_mcp_ke_semua_ide(verbose=True)
+    if dry_run:
+        print("[Mode Dry-Run] Memindai lingkungan IDE yang terdeteksi tanpa mengubah file...\n")
+    else:
+        print("Mendeteksi lingkungan IDE dan menyuntikkan MCP & Aturan Otomatis...\n")
+    terinjeksi = auto_inject_mcp_ke_semua_ide(verbose=True, dry_run=dry_run)
     print("-" * 72)
     if terinjeksi:
-        print(f"[Sukses] Karjimut otomatis terkonfigurasi di {len(terinjeksi)} lingkungan:")
+        label_status = "[Dry-Run] Target yang akan dikonfigurasi" if dry_run else "[Sukses] Karjimut otomatis terkonfigurasi di"
+        print(f"{label_status} ({len(terinjeksi)} lingkungan):")
         for nama in terinjeksi:
             print(f"   * {nama}")
     else:
-        print("[Info] Tidak ada IDE desktop yang terdeteksi otomatis. File mcp_config_siap_pakai.json dibuat.")
-    print(f"\nSalinan mcp_config_siap_pakai.json tersimpan di:\n  {config_out}")
+        print("[Info] Tidak ada IDE desktop yang terdeteksi otomatis.")
+    if not dry_run:
+        print(f"\nSalinan mcp_config_siap_pakai.json tersimpan di:\n  {config_out}")
     print("=" * 72)
 
-    if target_dir:
+    if target_dir and not dry_run:
         tujuan = Path(target_dir).resolve()
         tujuan.mkdir(parents=True, exist_ok=True)
         src_cursor = RULES_TEMPLATE_DIR / ".cursorrules"
@@ -624,6 +618,178 @@ def tampilkan_setup_ide(target_dir: str | None = None) -> None:
             agents_dir.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(src_antigravity, agents_dir / "sleep-mcp-auto.md")
         print(f"\n[Berhasil] Aturan Tiga Mandat Otomatis (.cursorrules, GEMINI.md, .agents/rules/) disalin ke: {tujuan}")
+
+
+def _import_archive_manager():
+    try:
+        from . import archive_manager
+
+        return archive_manager
+    except ImportError:
+        from src import archive_manager
+
+        return archive_manager
+
+
+def _pastikan_tercantum_di_gitignore(ws: Path, entries: tuple[str, ...]) -> list[str]:
+    """Memastikan berkas sensitif tim tercatat di ``.gitignore`` workspace agar tidak ter-commit."""
+    gitignore_fp = ws / ".gitignore"
+    baris_lama = gitignore_fp.read_text(encoding="utf-8", errors="ignore").splitlines() if gitignore_fp.is_file() else []
+    terdaftar = {b.strip() for b in baris_lama if b.strip() and not b.strip().startswith("#")}
+    tambahan = [e for e in entries if e not in terdaftar]
+    if tambahan:
+        baris_baru = list(baris_lama)
+        if baris_baru and baris_baru[-1].strip():
+            baris_baru.append("")
+        baris_baru.append("# Karjimut Team Secret (Jangan Commit)")
+        baris_baru.extend(tambahan)
+        gitignore_fp.write_text("\n".join(baris_baru) + "\n", encoding="utf-8")
+    return tambahan
+
+
+def _simpan_secret_ke_env_workspace(env_fp: Path, kunci: str, nilai: str) -> None:
+    """Menyimpan atau memperbarui satu variabel rahasia ke file ``.env`` workspace."""
+    baris_lama = env_fp.read_text(encoding="utf-8", errors="ignore").splitlines() if env_fp.is_file() else []
+    baris_baru: list[str] = []
+    terupdate = False
+    for b in baris_lama:
+        m = re.match(rf"^\s*(?:export\s+)?{re.escape(kunci)}\s*=", b)
+        if m:
+            baris_baru.append(f"{kunci}={nilai}")
+            terupdate = True
+        else:
+            baris_baru.append(b)
+    if not terupdate:
+        if baris_baru and baris_baru[-1].strip():
+            baris_baru.append("")
+        baris_baru.append(f"{kunci}={nilai}")
+    env_fp.write_text("\n".join(baris_baru) + "\n", encoding="utf-8")
+
+
+def jalankan_team_key(
+    target_dir: str | None = None,
+    mode: str = "env",
+    force: bool = False,
+) -> int:
+    """Membuat kunci HMAC tim dan menandatangani ulang ``team_memory.json`` jika tersedia."""
+    ws = Path(target_dir).resolve() if target_dir else Path.cwd().resolve()
+    if not ws.is_dir():
+        print(f"[Error] Direktori workspace tidak ditemukan: {ws}")
+        return 1
+
+    am = _import_archive_manager()
+    env_fp = ws / ".env"
+    secret_files = (ws / ".karjimut" / ".team_secret", ws / ".sleep-mcp" / ".team_secret")
+    secret_env = am._baca_var_env_workspace(env_fp, "KARJIMUT_TEAM_SECRET")
+    secret_file_val = ""
+    for kf in secret_files:
+        if kf.is_file() and not kf.is_symlink():
+            secret_file_val = kf.read_text(encoding="utf-8", errors="ignore").strip()
+            if secret_file_val:
+                break
+
+    secret = ""
+    baru_dibuat = False
+    if not force:
+        secret = secret_file_val if mode == "file" else secret_env
+        if not secret:
+            kunci_lain = secret_env if mode == "file" else secret_file_val
+            if kunci_lain:
+                secret = kunci_lain
+                baru_dibuat = True  # salin ke target yang diminta agar konsisten tanpa split-brain
+
+    if secret and not baru_dibuat:
+        if mode == "env" and secret_file_val and secret_file_val != secret:
+            print("[Peringatan] .team_secret memiliki prioritas lebih tinggi daripada .env; menyelaraskan dengan --mode env atau hapus .team_secret.")
+        print("[Info] KARJIMUT_TEAM_SECRET sudah ada di workspace (gunakan --force untuk rotasi kunci).")
+    else:
+        if not secret:
+            secret = secrets.token_urlsafe(32)
+            baru_dibuat = True
+        if mode == "file":
+            target_file = ws / ".karjimut" / ".team_secret"
+            target_file.parent.mkdir(parents=True, exist_ok=True)
+            target_file.write_text(secret + "\n", encoding="utf-8")
+            try:
+                os.chmod(target_file, 0o600)
+            except OSError:
+                pass
+            if force and secret_env:
+                _simpan_secret_ke_env_workspace(env_fp, "KARJIMUT_TEAM_SECRET", secret)
+            print(f"[Sukses] Kunci tim tersimpan di: {target_file}")
+        else:
+            _simpan_secret_ke_env_workspace(env_fp, "KARJIMUT_TEAM_SECRET", secret)
+            if force:
+                for kf in secret_files:
+                    if kf.is_file():
+                        kf.write_text(secret + "\n", encoding="utf-8")
+            elif secret_file_val and secret_file_val != secret:
+                print("[Peringatan] File .team_secret eksisting akan didahulukan saat resolusi kunci.")
+            print(f"[Sukses] KARJIMUT_TEAM_SECRET tersimpan di: {env_fp}")
+
+    ditambahkan_gi = _pastikan_tercantum_di_gitignore(
+        ws, (".env", ".karjimut/.team_secret", ".sleep-mcp/.team_secret")
+    )
+    if ditambahkan_gi:
+        print(f"[Aman] Ditambahkan ke {ws / '.gitignore'}: {', '.join(ditambahkan_gi)}")
+
+    # Tandatangani team_memory.json eksisting setelah lolos validasi skema & konten
+    for fp in (ws / ".karjimut" / "team_memory.json", ws / ".sleep-mcp" / "team_memory.json"):
+        if not fp.is_file():
+            continue
+        try:
+            data = json.loads(fp.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            print(f"[Gagal] Tidak dapat membaca {fp}: {exc}")
+            return 1
+        errs = am.validasi_skema_team_memory(data, periksa_konten=True)
+        if errs:
+            print(f"[Ditolak] {fp} gagal validasi sebelum ditandatangani:")
+            for e in errs:
+                print(f"  - {e}")
+            return 1
+        data["signature"] = am.hitung_signature_tim(data, secret)
+        fp.write_text(json.dumps(data, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        print(f"[Signed] Tanda tangan HMAC-SHA256 disematkan pada: {fp}")
+
+    if baru_dibuat:
+        print("\nBagikan baris berikut ke rekan tim tepercaya (via password manager / saluran privat):")
+        print(f"  KARJIMUT_TEAM_SECRET={secret}")
+    return 0
+
+
+def jalankan_verify_team(target_dir: str | None = None, strict: bool = False) -> int:
+    """Memvalidasi skema, kebersihan injeksi, dan tanda tangan HMAC berkas ``team_memory.json``."""
+    ws = Path(target_dir).resolve() if target_dir else Path.cwd().resolve()
+    if not ws.is_dir():
+        print(f"[Error] Direktori workspace tidak ditemukan: {ws}")
+        return 1
+
+    am = _import_archive_manager()
+    kandidat = [
+        fp
+        for fp in (ws / ".karjimut" / "team_memory.json", ws / ".sleep-mcp" / "team_memory.json")
+        if fp.is_file()
+    ]
+    if not kandidat:
+        print(f"[OK] Tidak ditemukan berkas team_memory.json pada: {ws}")
+        return 0
+
+    semua_valid = True
+    for fp in kandidat:
+        hasil = am.audit_berkas_team_memory(fp, path_workspace=str(ws), strict_signature=strict)
+        for w in hasil["warnings"]:
+            print(f"[Peringatan] {fp.name}: {w}")
+        if hasil["valid"]:
+            status_sig = "HMAC TERVERIFIKASI" if hasil["signature_valid"] else "SKEMA & KONTEN AMAN"
+            print(f"[OK] {fp} -> {status_sig}")
+        else:
+            semua_valid = False
+            print(f"[GAGAL] {fp}:")
+            for err in hasil["errors"]:
+                print(f"  - {err}")
+
+    return 0 if semua_valid else 1
 
 
 def menu_interaktif() -> None:
@@ -689,11 +855,45 @@ def main() -> None:
     parser.add_argument(
         "aksi",
         nargs="?",
-        choices=["gui", "menu", "test", "benchmark", "mcp", "setup", "setup-ide", "stop", "build-exe", "version"],
+        choices=[
+            "gui",
+            "menu",
+            "test",
+            "benchmark",
+            "mcp",
+            "setup",
+            "setup-ide",
+            "team-key",
+            "verify-team",
+            "stop",
+            "build-exe",
+            "version",
+        ],
         default="gui",
         help="Aksi yang ingin dijalankan (default: gui / Aplikasi Desktop CustomTkinter)",
     )
-    parser.add_argument("--target-dir", type=str, default=None, help="Folder proyek tujuan untuk menyalin Bootstrap Rules")
+    parser.add_argument("--target-dir", type=str, default=None, help="Folder proyek tujuan untuk Bootstrap Rules / Team Memory")
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Simulasikan deteksi dan injeksi konfigurasi IDE tanpa menulis file ke disk",
+    )
+    parser.add_argument(
+        "--mode",
+        choices=["env", "file"],
+        default="env",
+        help="Lokasi penyimpanan kunci tim untuk aksi team-key (env=.env, file=.karjimut/.team_secret)",
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Rotasi/timpa kunci tim yang sudah ada pada aksi team-key",
+    )
+    parser.add_argument(
+        "--strict",
+        action="store_true",
+        help="Wajibkan tanda tangan HMAC-SHA256 valid pada aksi verify-team",
+    )
     args = parser.parse_args()
 
     if args.aksi == "version":
@@ -713,7 +913,11 @@ def main() -> None:
     elif args.aksi == "mcp":
         jalankan_mcp_server()
     elif args.aksi in ("setup", "setup-ide"):
-        tampilkan_setup_ide(target_dir=args.target_dir)
+        tampilkan_setup_ide(target_dir=args.target_dir, dry_run=args.dry_run)
+    elif args.aksi == "team-key":
+        sys.exit(jalankan_team_key(target_dir=args.target_dir, mode=args.mode, force=args.force))
+    elif args.aksi == "verify-team":
+        sys.exit(jalankan_verify_team(target_dir=args.target_dir, strict=args.strict))
     elif args.aksi == "build-exe":
         sys.exit(build_standalone_exe())
     else:

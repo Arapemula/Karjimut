@@ -81,12 +81,16 @@ _RE_NARASI_CHANGELOG = re.compile(
 )
 MAX_ATURAN_KTP = 12
 _RE_PROMPT_INJECTION = re.compile(
-    r"\b(abaikan\s+(?:semua\s+)?instruksi|ignore\s+(?:all\s+)?(?:previous|prior|above)\s+instructions|"
+    r"(?:\b(?:abaikan\s+(?:semua\s+)?instruksi|ignore\s+(?:all\s+)?(?:previous|prior|above)\s+instructions|"
     r"disregard\s+(?:all\s+)?(?:previous|prior)\s+instructions|"
     r"lupakan\s+(?:semua\s+)?aturan|hapus\s+semua\s+aturan|forget\s+all\s+rules|"
     r"system\s+prompt|system\s+override|developer\s+mode|jailbreak|"
     r"matikan\s+autentikasi|disable\s+auth|bypass\s+security|jangan\s+validasi|"
-    r"izinkan\s+sql\s+injection|boleh\s+menggunakan\s+raw\s+sql)\b",
+    r"izinkan\s+sql\s+injection|boleh\s+menggunakan\s+raw\s+sql|"
+    r"(?:boleh|izinkan|allow|permit|tanpa|without|skip|bypass|disable|matikan|nonaktifkan)\s+(?:[\w\s\-]{0,30}?)\b(?:auth|autentikasi|token|jwt|password|sandi|verifikasi|validasi|permission|izin|tls|ssl|csrf)|"
+    r"(?:kirim|unggah|upload|exfiltrate|post)\s+(?:[\w\s\-/\\]{0,25}?)(?:\.env|\b(?:secret|api[_\s]?key|private[_\s]?key|credential|password))|"
+    r"Invoke-Expression|powershell\s+[^\n]{0,40}-e(?:nc|ncodedcommand)?|webhook\.site|burpcollaborator|pipedream\.net|requestbin|oastify\.com|interact\.sh|ngrok(?:-free)?\.(?:io|app)|"
+    r"nc\s+-e)\b|\b(?:iex|os\.system)\s*\(|(?<!\w)/bin/(?:ba)?sh\s+-i\b)",
     re.I,
 )
 _RE_PROMPT_BREAKOUT = re.compile(
@@ -97,7 +101,7 @@ _RE_STATUS_NON_SOLUSI = re.compile(
     r"^\s*(?:"
     r"menjalankan\s+\d+\s+unit\s+test|"
     r"melakukan\s+audit\s+menyeluruh|"
-    r"memperbarui\s+(?:readme\.md|dokumen|dokumentasi|changelog)|"
+    r"memperbarui\s+(?:readme\.md|dokumen|dokumentasi|changelog|official\s+site|halaman\s+utama|landing\s+page|tampilan\s+ui)|"
     r"pembersihan\s+temp\s+file\b"
     r")",
     re.I,
@@ -116,15 +120,22 @@ _TAG_NON_SOLUSI: frozenset[str] = frozenset(
         "#pengujian", "#unit-test", "#benchmark", "#audit-kualitas",
         "#zero-error", "#verifikasi-lengkap",
         "#system-maintenance", "#cleanup-temp",
+        "#official-site", "#ui-overhaul", "#landing-page", "#redesign",
     }
 )
 _TAG_GENERIK_DEDUP: frozenset[str] = frozenset(
     {"#bug-fix", "#error", "#errors", "#bug", "#bugs", "#fix", "#issue", "#masalah"}
 )
 _RE_CREDENTIAL_REDACT = re.compile(
-    r"((?:key|api_key|token|secret)=)[^&\s\"']+|"
-    r"(Bearer\s+)[A-Za-z0-9._\-]+|"
-    r"\b(AIza[0-9A-Za-z_\-]{20,}|sk-[A-Za-z0-9_\-]{16,}|gsk_[A-Za-z0-9_\-]{16,})",
+    r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----[\s\S]*?(?:-----END [A-Z0-9 ]*PRIVATE KEY-----|$)|"
+    r"(?P<kv>\b(?:key|api[_-]?key|apikey|token|secret|password|passwd|access[_-]?token|refresh[_-]?token|client[_-]?secret)=)[^\s&\"';]+(?<![.,)!?])|"
+    r"(?P<auth_hdr>\bAuthorization\s*[:=]\s*(?:Bearer|Basic)\s+)[A-Za-z0-9._~+/=-]{4,}|"
+    r"(?P<auth_tok>\b(?:Bearer|Basic)\s+)(?=[A-Za-z0-9._~+/=-]*(?:[0-9=+/\-_]|\.[A-Za-z0-9_-]|(?-i:[a-z]{1,6}[A-Z]{1,6}[a-z]{1,6}[A-Z])))[A-Za-z0-9._~+/=-]{6,}(?<=[A-Za-z0-9_=+/\-])|"
+    r"(?P<urluser>[a-zA-Z][a-zA-Z0-9+.-]*://[^/\s:@]+:)[^/\s@]+(?=@)|"
+    r"(?-i:\b(?:AIza[0-9A-Za-z_\-]{20,}|AQ\.[0-9A-Za-z._\-]{16,}|"
+    r"gh[pousr]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,}|"
+    r"(?:AKIA|ASIA)[0-9A-Z]{16}|xox[baprs]-[0-9A-Za-z\-]{10,}))|"
+    r"\b(?:sk-[A-Za-z0-9_\-]{16,}|gsk_[A-Za-z0-9_\-]{16,})",
     re.I,
 )
 
@@ -224,13 +235,21 @@ KAMUS_GEJALA: tuple[tuple[re.Pattern[str], str], ...] = tuple(
 # ===========================================================================
 # Fungsi Sanitasi, Pemfilteran Noise, & Quality Gate
 # ===========================================================================
+def _ganti_kredensial(match: re.Match[str]) -> str:
+    prefix = (
+        match.group("kv")
+        or match.group("auth_hdr")
+        or match.group("auth_tok")
+        or match.group("urluser")
+        or ""
+    )
+    return f"{prefix}[REDACTED_SECRET]"
+
+
 def sanitasi_pesan_error(pesan: Any) -> str:
     """Menyensor API key/token dari pesan exception sebelum dicatat ke log atau dikembalikan."""
     teks = str(pesan or "")
-    return _RE_CREDENTIAL_REDACT.sub(
-        lambda m: f"{m.group(1) or m.group(2) or ''}[REDACTED_SECRET]",
-        teks,
-    )
+    return _RE_CREDENTIAL_REDACT.sub(_ganti_kredensial, teks)
 
 
 def bersihkan_injeksi_memori(teks: str) -> str:
@@ -261,7 +280,12 @@ def _tutup(teks: str) -> str:
 
 
 def _split_item(teks: str) -> list[str]:
-    return [x.strip().rstrip(". ").strip() for x in re.split(r",", teks) if x.strip().rstrip(". ").strip()]
+    """Memecah daftar item (Stack / Struktur) berdasarkan koma/titik-koma di luar tanda kurung."""
+    return [
+        x.strip().rstrip(". ").strip()
+        for x in re.split(r"[,;](?![^()]*\))", teks)
+        if x.strip().rstrip(". ").strip()
+    ]
 
 
 def layak_masuk_laci_arsip(solusi: str, tag_masalah: str | Iterable[str] = "") -> bool:
@@ -451,7 +475,30 @@ def _kata_kunci_aturan(aturan: str) -> set[str]:
     return {k for k in kata if len(k) > 2 and k not in STOPWORDS_ATURAN}
 
 
-def gabung_aturan(aturan_lama: list[str], aturan_baru: list[str]) -> list[str]:
+def _batas_aturan_aktif(max_tokens: int | None = None) -> int:
+    """Menentukan batas aturan aktif sesuai ``KTP_MAX_RULES`` dan mode Elastic Core.
+
+    - Jika ``KTP_MAX_RULES > 0``, pakai angka tersebut.
+    - Jika ``KTP_MAX_RULES == 0`` dan Elastic Core aktif (``max_tokens == 0``),
+      kembalikan ``0`` (tanpa pemotongan paksa jumlah aturan).
+    - Jika ``KTP_MAX_TOKENS > 0`` dan ``KTP_MAX_RULES == 0``, pakai ``MAX_ATURAN_KTP`` (12).
+    """
+    from .config import get_settings
+
+    s = get_settings()
+    if s.ktp_max_rules > 0:
+        return s.ktp_max_rules
+    efektif_tokens = s.ktp_max_tokens if max_tokens is None else max(0, int(max_tokens))
+    if efektif_tokens == 0:
+        return 0
+    return MAX_ATURAN_KTP
+
+
+def gabung_aturan(
+    aturan_lama: list[str],
+    aturan_baru: list[str],
+    max_aturan: int | None = None,
+) -> list[str]:
     """Incremental merge aturan: aturan lama dipertahankan, aturan baru yang mirip
     (Jaccard kata >= 0.55) menggantikan versi lamanya di posisi yang sama,
     dan narasi changelog/milestone disaring agar KTP tidak membengkak."""
@@ -472,8 +519,9 @@ def gabung_aturan(aturan_lama: list[str], aturan_baru: list[str]) -> list[str]:
             hasil[indeks_mirip] = baru
         else:
             hasil.append(baru)
-    if len(hasil) > MAX_ATURAN_KTP:
-        hasil = hasil[-MAX_ATURAN_KTP:]
+    batas = _batas_aturan_aktif() if max_aturan is None else max(0, int(max_aturan))
+    if batas > 0 and len(hasil) > batas:
+        hasil = hasil[-batas:]
     return hasil
 
 

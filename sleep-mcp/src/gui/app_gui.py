@@ -17,22 +17,16 @@ import sys
 import threading
 from typing import Any
 
-if sys.platform == "win32":
-    try:
-        import ctypes
-
-        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("karjimut.desktop.v2")
-    except Exception:
-        pass
-
 import customtkinter as ctk
 
-from ..config import get_settings, setup_logging
+from ..config import atur_app_user_model_id_windows, get_settings, setup_logging
 from ..consolidator import jalankan_sleep_cycle_tuntas
 from ..db import daftar_proyek, koneksi, pastikan_db
 from ..fts_search import cari_solusi_fts_conn
 from ..idle_watcher import IdleWatcherDaemon, hitung_status_siklus_proyek
-from ..services import hitung_metrik_proyek
+from ..services import hitung_metrik_proyek, hitung_self_assessment_proyek
+
+atur_app_user_model_id_windows()
 from .i18n import (
     BAHASA_TERSEDIA,
     LANG_EN,
@@ -102,6 +96,88 @@ class _SidebarNavController:
         return self._current
 
 
+def kumpulkan_snapshot_gui(
+    db_path: str,
+    kode_proyek: str,
+    search_query: str = "",
+    solusi_sort_mode: str = "id_desc",
+) -> dict[str, Any]:
+    """Mengumpulkan seluruh state proyek GUI dalam 1 koneksi SQLite (aman dipanggil dari thread pekerja)."""
+    with koneksi(db_path) as conn:
+        proyek_db = daftar_proyek(conn)
+        status_siklus = hitung_status_siklus_proyek(kode_proyek, db_path, conn=conn)
+        metrik = hitung_metrik_proyek(conn, kode_proyek)
+        self_assessment = hitung_self_assessment_proyek(conn, kode_proyek)
+
+        ktp_raw = conn.execute(
+            """
+            SELECT ringkasan_inti, ringkasan_sebelumnya, jumlah_token, versi_ktp, waktu_update
+            FROM ktp_proyek WHERE kode_proyek = ?
+            """,
+            (kode_proyek,),
+        ).fetchone()
+        ktp_row = dict(ktp_raw) if ktp_raw is not None else None
+
+        total_solusi = int(
+            conn.execute(
+                "SELECT COUNT(*) FROM laci_arsip WHERE kode_proyek = ?",
+                (kode_proyek,),
+            ).fetchone()[0]
+        )
+
+        if search_query:
+            solusi_rows = cari_solusi_fts_conn(conn, kode_proyek, search_query, limit=10)
+        else:
+            raw_solusi = conn.execute(
+                """
+                SELECT id, kode_proyek, tag_masalah, solusi_paten,
+                       COALESCE(confidence, 0.7) AS confidence,
+                       COALESCE(hit_count, 0) AS hit_count,
+                       COALESCE(miss_count, 0) AS miss_count,
+                       COALESCE(is_stale, 0) AS is_stale,
+                       COALESCE(catatan_evaluasi, '') AS catatan_evaluasi,
+                       waktu_dibuat,
+                       (SELECT GROUP_CONCAT(target_id, ', ') FROM relasi_solusi WHERE source_id = laci_arsip.id AND relasi = 'SUPERSEDED') AS supersedes_id,
+                       (SELECT GROUP_CONCAT(source_id, ', ') FROM relasi_solusi WHERE target_id = laci_arsip.id AND relasi = 'SUPERSEDED') AS superseded_by_id
+                FROM laci_arsip WHERE kode_proyek = ? ORDER BY id DESC
+                """,
+                (kode_proyek,),
+            ).fetchall()
+            solusi_rows = [dict(r) for r in raw_solusi]
+            if solusi_sort_mode == "id_asc":
+                solusi_rows.sort(key=lambda s: int(s.get("id", 0)))
+            elif solusi_sort_mode == "conf_desc":
+                solusi_rows.sort(key=lambda s: (float(s.get("confidence", 0.7)), int(s.get("id", 0))), reverse=True)
+            else:
+                solusi_rows.sort(key=lambda s: int(s.get("id", 0)), reverse=True)
+
+        antrean_raw = conn.execute(
+            """
+            SELECT id, kode_proyek, isi_log, estimasi_token_mentah,
+                   waktu_masuk, waktu_kunci, status_rangkum
+            FROM antrean_mentah
+            WHERE kode_proyek = ?
+            ORDER BY id DESC
+            LIMIT 25
+            """,
+            (kode_proyek,),
+        ).fetchall()
+
+    return {
+        "kode": kode_proyek,
+        "proyek_db": proyek_db,
+        "status_siklus": status_siklus,
+        "metrik": metrik,
+        "self_assessment": self_assessment,
+        "ktp_row": ktp_row,
+        "total_solusi": total_solusi,
+        "solusi_rows": solusi_rows,
+        "antrean_rows": [dict(r) for r in antrean_raw],
+        "search_query": search_query,
+        "sort_mode": solusi_sort_mode,
+    }
+
+
 class SleepMCPDesktopApp(
     ShellLayoutMixin,
     KtpTabMixin,
@@ -123,13 +199,7 @@ class SleepMCPDesktopApp(
     PAGE_ANTREAN = PAGE_CATATAN
 
     def __init__(self, skip_onboarding: bool = False) -> None:
-        if sys.platform == "win32":
-            try:
-                import ctypes
-
-                ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("karjimut.desktop.v2")
-            except Exception:
-                pass
+        atur_app_user_model_id_windows()
 
         super().__init__()
 
@@ -160,6 +230,9 @@ class SleepMCPDesktopApp(
         self._show_settings_key: bool = False
         self._closing: bool = False
         self._poll_job: str | None = None
+        self._search_debounce_job: str | None = None
+        self._refresh_req_id: int = 0
+        self._refresh_in_flight: bool = False
         self._nav_buttons: dict[str, ctk.CTkButton] = {}
         self._halaman_aktif: str = self.PAGE_CORE
 
@@ -382,96 +455,50 @@ class SleepMCPDesktopApp(
         OnboardingDialog(self, on_complete=lambda: self.refresh_semua_data(force_editor=False))
 
     def _auto_poll_loop(self) -> None:
-        """Polling ringan setiap 2 detik untuk memperbarui status siklus & mendeteksi perubahan DB."""
+        """Polling non-blocking setiap 2 detik untuk memperbarui status siklus & mendeteksi perubahan DB."""
         if self._closing:
             return
         try:
-            self.refresh_semua_data(force_editor=False)
+            if not self._refresh_in_flight:
+                self.refresh_semua_data_async(force_editor=False)
         except Exception as exc:
             logger.debug("Auto-poll warning: %s", exc)
         finally:
             if not self._closing:
                 self._poll_job = self.after(2000, self._auto_poll_loop)
 
-    def refresh_semua_data(self, force_editor: bool = False) -> None:
-        """Membaca state terkini dari SQLite dalam 1 koneksi dan memperbarui komponen UI."""
-        self.settings = get_settings()
-        kode = self.kode_proyek_aktif
+    def _terapkan_snapshot_ui(self, snap: dict[str, Any], force_editor: bool = False) -> None:
+        """Memperbarui seluruh widget GUI di main Tk thread dari snapshot hasil query."""
+        if self._closing:
+            return
+        kode = snap["kode"]
+        for p in snap["proyek_db"]:
+            if p not in self.daftar_proyek_tersedia:
+                self.daftar_proyek_tersedia.append(p)
+        if kode not in self.daftar_proyek_tersedia:
+            self.daftar_proyek_tersedia.insert(0, kode)
+        self.opt_proyek.configure(values=self.daftar_proyek_tersedia)
 
-        with koneksi(self.settings.db_path) as conn:
-            proyek_db = daftar_proyek(conn)
-            for p in proyek_db:
-                if p not in self.daftar_proyek_tersedia:
-                    self.daftar_proyek_tersedia.append(p)
-            if kode not in self.daftar_proyek_tersedia:
-                self.daftar_proyek_tersedia.insert(0, kode)
-            self.opt_proyek.configure(values=self.daftar_proyek_tersedia)
-
-            status_siklus = hitung_status_siklus_proyek(kode, self.settings.db_path, conn=conn)
-            metrik = hitung_metrik_proyek(conn, kode)
-
-            ktp_row = conn.execute(
-                """
-                SELECT ringkasan_inti, ringkasan_sebelumnya, jumlah_token, versi_ktp, waktu_update
-                FROM ktp_proyek WHERE kode_proyek = ?
-                """,
-                (kode,),
-            ).fetchone()
-
-            total_solusi = conn.execute(
-                "SELECT COUNT(*) FROM laci_arsip WHERE kode_proyek = ?",
-                (kode,),
-            ).fetchone()[0]
-
-            if self._search_query_aktif:
-                solusi_rows = cari_solusi_fts_conn(conn, kode, self._search_query_aktif, limit=10)
-            else:
-                raw_solusi = conn.execute(
-                    """
-                    SELECT id, kode_proyek, tag_masalah, solusi_paten,
-                           COALESCE(confidence, 0.7) AS confidence,
-                           COALESCE(hit_count, 0) AS hit_count,
-                           COALESCE(miss_count, 0) AS miss_count,
-                           COALESCE(is_stale, 0) AS is_stale,
-                           waktu_dibuat,
-                           (SELECT GROUP_CONCAT(target_id, ', ') FROM relasi_solusi WHERE source_id = laci_arsip.id AND relasi = 'SUPERSEDED') AS supersedes_id,
-                           (SELECT GROUP_CONCAT(source_id, ', ') FROM relasi_solusi WHERE target_id = laci_arsip.id AND relasi = 'SUPERSEDED') AS superseded_by_id
-                    FROM laci_arsip WHERE kode_proyek = ? ORDER BY id DESC
-                    """,
-                    (kode,),
-                ).fetchall()
-                solusi_rows = [dict(r) for r in raw_solusi]
-                if self._solusi_sort_mode == "id_asc":
-                    solusi_rows.sort(key=lambda s: int(s.get("id", 0)))
-                elif self._solusi_sort_mode == "conf_desc":
-                    solusi_rows.sort(key=lambda s: (float(s.get("confidence", 0.7)), int(s.get("id", 0))), reverse=True)
-                else:
-                    solusi_rows.sort(key=lambda s: int(s.get("id", 0)), reverse=True)
-
-            antrean_rows = conn.execute(
-                """
-                SELECT id, kode_proyek, isi_log, estimasi_token_mentah,
-                       waktu_masuk, waktu_kunci, status_rangkum
-                FROM antrean_mentah
-                WHERE kode_proyek = ?
-                ORDER BY id DESC
-                LIMIT 25
-                """,
-                (kode,),
-            ).fetchall()
+        status_siklus = snap["status_siklus"]
+        metrik = snap["metrik"]
+        self_assessment = snap["self_assessment"]
+        ktp_row = snap["ktp_row"]
+        solusi_rows = snap["solusi_rows"]
+        antrean_rows = snap["antrean_rows"]
 
         self._render_header_badges(status_siklus)
         self._render_tab_settings_status()
-        self._render_kpi_summary_row(ktp_row, int(total_solusi), metrik, status_siklus)
+        self._render_kpi_summary_row(ktp_row, int(snap["total_solusi"]), metrik, status_siklus)
 
         sig = (
             kode,
-            dict(ktp_row) if ktp_row else None,
+            ktp_row,
             tuple(
                 (
                     s.get("id"),
                     s.get("tag_masalah"),
                     s.get("solusi_paten"),
+                    s.get("catatan_evaluasi", ""),
                     s.get("confidence"),
                     s.get("hit_count"),
                     s.get("miss_count"),
@@ -481,11 +508,14 @@ class SleepMCPDesktopApp(
                 )
                 for s in solusi_rows
             ),
-            self._solusi_sort_mode,
+            snap["sort_mode"],
+            snap["search_query"],
             tuple((r["id"], r["status_rangkum"]) for r in antrean_rows),
             metrik["t_baseline"],
             metrik["t_total_mcp"],
             len(metrik["history"]),
+            self_assessment.get("total_hit", 0),
+            self_assessment.get("total_miss", 0),
         )
         if not force_editor and sig == self._last_data_signature:
             return
@@ -493,7 +523,61 @@ class SleepMCPDesktopApp(
 
         self._render_tab_ktp(ktp_row, force_editor=force_editor)
         self._render_tab_solusi(solusi_rows)
-        self._render_tab_antrean([dict(r) for r in antrean_rows], metrik, status_siklus)
+        self._render_tab_antrean(antrean_rows, metrik, status_siklus, self_assessment=self_assessment)
+
+    def refresh_semua_data_async(self, force_editor: bool = False) -> None:
+        """Membaca state SQLite di thread pekerja agar UI Tkinter tidak freeze saat polling/pencarian."""
+        if self._closing:
+            return
+        self.settings = get_settings()
+        self._refresh_req_id += 1
+        req_id = self._refresh_req_id
+        self._refresh_in_flight = True
+
+        db_path = self.settings.db_path
+        kode = self.kode_proyek_aktif
+        search_q = self._search_query_aktif
+        sort_mode = self._solusi_sort_mode
+
+        def _worker() -> None:
+            snap: dict[str, Any] | None = None
+            try:
+                snap = kumpulkan_snapshot_gui(db_path, kode, search_q, sort_mode)
+            except Exception as exc:
+                logger.debug("Snapshot background GUI gagal: %s", exc)
+
+            def _apply() -> None:
+                if req_id == self._refresh_req_id:
+                    self._refresh_in_flight = False
+                if (
+                    snap is None
+                    or self._closing
+                    or req_id != self._refresh_req_id
+                    or kode != self.kode_proyek_aktif
+                ):
+                    return
+                self._terapkan_snapshot_ui(snap, force_editor=force_editor)
+
+            if not self._closing:
+                try:
+                    self.after(0, _apply)
+                except Exception:
+                    if req_id == self._refresh_req_id:
+                        self._refresh_in_flight = False
+
+        threading.Thread(target=_worker, daemon=True, name="SleepMCP-GUI-Snapshot").start()
+
+    def refresh_semua_data(self, force_editor: bool = False) -> None:
+        """Membaca state terkini dari SQLite dalam 1 koneksi dan memperbarui komponen UI."""
+        self.settings = get_settings()
+        self._refresh_req_id += 1
+        snap = kumpulkan_snapshot_gui(
+            self.settings.db_path,
+            self.kode_proyek_aktif,
+            self._search_query_aktif,
+            self._solusi_sort_mode,
+        )
+        self._terapkan_snapshot_ui(snap, force_editor=force_editor)
 
     # =========================================================================
     # LOGIKA TRIGGER SLEEP CYCLE (BACKGROUND THREAD) & PENUTUPAN JENDELA
@@ -542,12 +626,14 @@ class SleepMCPDesktopApp(
 
     def _on_close(self) -> None:
         self._closing = True
-        if self._poll_job is not None:
-            try:
-                self.after_cancel(self._poll_job)
-            except Exception:
-                pass
-            self._poll_job = None
+        for job_attr in ("_poll_job", "_search_debounce_job"):
+            job_id = getattr(self, job_attr, None)
+            if job_id is not None:
+                try:
+                    self.after_cancel(job_id)
+                except Exception:
+                    pass
+                setattr(self, job_attr, None)
         try:
             self.watcher.stop(timeout=1.5)
         except Exception:
@@ -563,13 +649,7 @@ KarjimutDesktopApp = SleepMCPDesktopApp
 
 def start_desktop_app(skip_onboarding: bool = False) -> None:
     """Meluncurkan jendela utama Karjimut Desktop Native App."""
-    if sys.platform == "win32":
-        try:
-            import ctypes
-
-            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("karjimut.desktop.v2")
-        except Exception:
-            pass
+    atur_app_user_model_id_windows()
 
     app = KarjimutDesktopApp(skip_onboarding=skip_onboarding)
     app.mainloop()
