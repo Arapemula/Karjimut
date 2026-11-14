@@ -1,0 +1,9 @@
+# GitHub CODEOWNERS for Karjimut / Sleep-MCP Shared Team Memory
+# Prevents unreviewed modifications to shared agent context (Indirect Prompt Injection defense).
+# Enable "Require a pull request before merging" + "Require review from Code Owners" in GitHub Branch Protection.
+# Replace or append team/maintainer handles below as needed.
+
+/.karjimut/ @Arapemula
+/.karjimut/team_memory.json @Arapemula
+/.sleep-mcp/ @Arapemula
+/.sleep-mcp/team_memory.json @Arapemula
