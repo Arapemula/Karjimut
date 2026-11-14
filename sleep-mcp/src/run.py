@@ -842,7 +842,7 @@ def main() -> None:
                 from karjimut import __app_name__, __version__
             except Exception:
                 __app_name__ = "Karjimut"
-                __version__ = "2.0.13"
+                __version__ = "2.0.14"
 
     parser = argparse.ArgumentParser(description="Karjimut One-Step Runner")
     parser.add_argument(
