@@ -33,7 +33,7 @@ Karjimut (`sleep-mcp`) operates in a midnight command-center language: a near-bl
 - **OpenType features:** `"liga"`
 - **Role:** Primary typeface for headings, body, navigation, and buttons.
 
-### JetBrains Mono — All-caps category labels, section eyebrows (e.g. "TWO-TIER ARCHITECTURE", "SLEEP CONSOLIDATION"), version tags (`v2.0.13`), MCP tool primitives (`baca_ktp_proyek`), `#tag-masalah` pills, and CLI install snippets (`pip install karjimut`). Wide tracking (+0.071em to +0.083em) gives the type a stamped, technical feel — it reads as protocol metadata, not copy. · `--font-jetbrains-mono`
+### JetBrains Mono — All-caps category labels, section eyebrows (e.g. "TWO-TIER ARCHITECTURE", "SLEEP CONSOLIDATION"), version tags (`v2.0.14`), MCP tool primitives (`baca_ktp_proyek`), `#tag-masalah` pills, and CLI install snippets (`pip install karjimut`). Wide tracking (+0.071em to +0.083em) gives the type a stamped, technical feel — it reads as protocol metadata, not copy. · `--font-jetbrains-mono`
 - **Substitute:** JetBrains Mono or IBM Plex Mono
 - **Weights:** 400
 - **Sizes:** 12, 14
