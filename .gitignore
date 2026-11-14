@@ -42,6 +42,7 @@ Thumbs.db
 karjimut-review/
 docs-private/
 DOC-*/
+extracted_doc.txt
 *.docx
 *.bak
 *.pdf

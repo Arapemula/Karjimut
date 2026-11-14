@@ -3,7 +3,7 @@
 **Sistem:**
 *Karjimut: Two-Tier Memory Architecture with Idle Consolidation and Elastic Core*
 
-- **Waktu Pengukuran:** 2026-11-08 16:23:16
+- **Waktu Pengukuran:** 2026-11-12 11:42:31
 - **Tokenizer Aktual:** `tiktoken/cl100k_base` (Tanpa angka estimasi manual)
 - **Database Engine:** SQLite 3 WAL Mode + FTS5 BM25 + `sqlite-vec` Hybrid RRF
 
@@ -58,21 +58,21 @@
 
 | No | Kasus Uji Query                          | Linear Scan (Aktual) | Karjimut Hybrid (Aktual) | Rasio Latensi | Hasil Retrieval | Metode    |
 | -- | ---------------------------------------- | -------------------- | ------------------------ | ------------- | --------------- | --------- |
-| 1  | CORS Origin Blocked (Trace EN)           | 309.94 ms            | 147.79 ms                | 2.10x         | VALID (Top-1)   | FTS5_BM25 |
-| 2  | Database Pool Timeout (Trace EN)         | 190.49 ms            | 85.11 ms                 | 2.24x         | VALID (Top-1)   | FTS5_BM25 |
-| 3  | JWT Token Expired (Trace EN)             | 178.93 ms            | 59.68 ms                 | 3.00x         | VALID (Top-1)   | FTS5_BM25 |
-| 4  | Alembic Multiple Heads (Trace EN)        | 152.89 ms            | 54.90 ms                 | 2.79x         | VALID (Top-1)   | FTS5_BM25 |
-| 5  | Redis Connection Refused (Trace EN)      | 137.31 ms            | 91.70 ms                 | 1.50x         | VALID (Top-1)   | FTS5_BM25 |
-| 6  | CORS Preflight Header (Bilingual ID)     | 128.77 ms            | 91.70 ms                 | 1.40x         | VALID (Top-1)   | FTS5_BM25 |
-| 7  | Koneksi Database Terkunci (Bilingual ID) | 119.17 ms            | 94.17 ms                 | 1.27x         | VALID (Top-1)   | FTS5_BM25 |
-| 8  | Sesi Login Kedaluwarsa (Bilingual ID)    | 135.38 ms            | 71.71 ms                 | 1.89x         | VALID (Top-1)   | FTS5_BM25 |
-| 9  | Konflik Cabang Migrasi (Bilingual ID)    | 115.98 ms            | 61.83 ms                 | 1.88x         | VALID (Top-1)   | FTS5_BM25 |
-| 10 | Port Redis Ditolak (Bilingual ID)        | 133.75 ms            | 56.25 ms                 | 2.38x         | VALID (Top-1)   | FTS5_BM25 |
-| 11 | CORS Tag Lookup                          | 20.66 ms             | 30.39 ms                 | 0.68x         | VALID (Top-1)   | FTS5_BM25 |
-| 12 | DB Pool Tag Lookup                       | 21.11 ms             | 36.95 ms                 | 0.57x         | VALID (Top-1)   | FTS5_BM25 |
-| 13 | JWT Auth Tag Lookup                      | 23.13 ms             | 52.09 ms                 | 0.44x         | VALID (Top-1)   | FTS5_BM25 |
-| 14 | Alembic Tag Lookup                       | 22.78 ms             | 50.07 ms                 | 0.46x         | VALID (Top-1)   | FTS5_BM25 |
-| 15 | Redis Tag Lookup                         | 36.81 ms             | 31.56 ms                 | 1.17x         | VALID (Top-1)   | FTS5_BM25 |
+| 1  | CORS Origin Blocked (Trace EN)           | 426.13 ms            | 217.36 ms                | 1.96x         | VALID (Top-1)   | FTS5_BM25 |
+| 2  | Database Pool Timeout (Trace EN)         | 462.29 ms            | 81.28 ms                 | 5.69x         | VALID (Top-1)   | FTS5_BM25 |
+| 3  | JWT Token Expired (Trace EN)             | 510.70 ms            | 97.10 ms                 | 5.26x         | VALID (Top-1)   | FTS5_BM25 |
+| 4  | Alembic Multiple Heads (Trace EN)        | 140.62 ms            | 281.42 ms                | 0.50x         | VALID (Top-1)   | FTS5_BM25 |
+| 5  | Redis Connection Refused (Trace EN)      | 337.26 ms            | 185.50 ms                | 1.82x         | VALID (Top-1)   | FTS5_BM25 |
+| 6  | CORS Preflight Header (Bilingual ID)     | 406.47 ms            | 182.50 ms                | 2.23x         | VALID (Top-1)   | FTS5_BM25 |
+| 7  | Koneksi Database Terkunci (Bilingual ID) | 136.23 ms            | 77.86 ms                 | 1.75x         | VALID (Top-1)   | FTS5_BM25 |
+| 8  | Sesi Login Kedaluwarsa (Bilingual ID)    | 153.11 ms            | 266.63 ms                | 0.57x         | VALID (Top-1)   | FTS5_BM25 |
+| 9  | Konflik Cabang Migrasi (Bilingual ID)    | 2946.37 ms           | 166.62 ms                | 17.68x        | VALID (Top-1)   | FTS5_BM25 |
+| 10 | Port Redis Ditolak (Bilingual ID)        | 137.11 ms            | 59.09 ms                 | 2.32x         | VALID (Top-1)   | FTS5_BM25 |
+| 11 | CORS Tag Lookup                          | 22.96 ms             | 34.63 ms                 | 0.66x         | VALID (Top-1)   | FTS5_BM25 |
+| 12 | DB Pool Tag Lookup                       | 19.54 ms             | 43.56 ms                 | 0.45x         | VALID (Top-1)   | FTS5_BM25 |
+| 13 | JWT Auth Tag Lookup                      | 23.48 ms             | 41.23 ms                 | 0.57x         | VALID (Top-1)   | FTS5_BM25 |
+| 14 | Alembic Tag Lookup                       | 19.31 ms             | 31.17 ms                 | 0.62x         | VALID (Top-1)   | FTS5_BM25 |
+| 15 | Redis Tag Lookup                         | 17.76 ms             | 29.04 ms                 | 0.61x         | VALID (Top-1)   | FTS5_BM25 |
 
 ### Analisis Kuantitatif Skenario 3:
 1. **Akurasi Retrieval pada $N=15$ Query Positif (ID & EN):**
@@ -80,6 +80,6 @@
    - **Recall@3 (Top-3 Accuracy):** **100.0% (15/15)**
    - **Mean Reciprocal Rank (MRR):** **1.0**
 2. **Ketahanan Terhadap False Positive pada $N=10$ Query Negatif & Lintas Proyek:**
-   - **Out-of-Domain Rejection Rate (True Negative Rate):** **100.0% (10/10 ditolak tepat, termasuk query `"ruff No module named ruff"`)**
+   - **Out-of-Domain Rejection Rate (True Negative Rate):** **100.0% (10/10 query di luar domain ditolak tepat)**
    - **False Positive Rate (FPR):** **0.0%**
 3. **Deduplikasi Deterministik Laci Arsip:** Terbukti **0 duplikasi baris** (tetap `5` baris solusi master pada proyek uji).

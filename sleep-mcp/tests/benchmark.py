@@ -24,7 +24,7 @@ Metodologi Evaluasi Empiris (Bebas Angka Hardcode / Simulasi Artifisial):
      * Baseline (Unindexed Linear Raw-Log Scan pada korpus 200 log sesi mentah) vs
      * Karjimut Hybrid Search (Indexed FTS5 BM25 + 384-d Vector RRF pada Laci Arsip).
    - Menguji $N=25$ query ($15$ query positif variasi gejala ID/EN + $10$ query negatif Out-of-Domain
-     dan lintas proyek tidak relevan termasuk kasus `"ruff No module named ruff"`).
+     dan lintas proyek tidak relevan untuk mengukur ketahanan terhadap *false positive*).
    - Mengukur **Precision@1**, **Recall@3**, **MRR**, dan **False Positive Rate (FPR)**.
 """
 
@@ -682,109 +682,94 @@ def jalankan_skenario_3(db_path: str) -> dict[str, Any]:
             "nama_bug": "CORS Origin Blocked (Trace EN)",
             "query_gejala": "Access to fetch at 'http://localhost:8000' from origin 'http://localhost:3000' has been blocked by CORS policy",
             "expected_tag": "#cors-policy",
-            "baseline_retry_steps": 4,
         },
         {
             "id": 2,
             "nama_bug": "Database Pool Timeout (Trace EN)",
             "query_gejala": "QueuePool limit of size 5 overflow 10 reached, connection timed out database is locked",
             "expected_tag": "#koneksi-db",
-            "baseline_retry_steps": 5,
         },
         {
             "id": 3,
             "nama_bug": "JWT Token Expired (Trace EN)",
             "query_gejala": "HTTP 401 Unauthorized Signature has expired decode error jwt auth token",
             "expected_tag": "#jwt-auth",
-            "baseline_retry_steps": 3,
         },
         {
             "id": 4,
             "nama_bug": "Alembic Multiple Heads (Trace EN)",
             "query_gejala": "Multiple head revisions are present in alembic migrations branch conflict",
             "expected_tag": "#alembic",
-            "baseline_retry_steps": 4,
         },
         {
             "id": 5,
             "nama_bug": "Redis Connection Refused (Trace EN)",
             "query_gejala": "Error 111 connecting to 127.0.0.1:6379 Connection refused redis service",
             "expected_tag": "#redis",
-            "baseline_retry_steps": 3,
         },
         {
             "id": 6,
             "nama_bug": "CORS Preflight Header (Bilingual ID)",
             "query_gejala": "request frontend ditolak browser karena preflight header access control origin",
             "expected_tag": "#cors-policy",
-            "baseline_retry_steps": 4,
         },
         {
             "id": 7,
             "nama_bug": "Koneksi Database Terkunci (Bilingual ID)",
             "query_gejala": "error koneksi database terkunci dan pool timeout saat trafik padat",
             "expected_tag": "#koneksi-db",
-            "baseline_retry_steps": 5,
         },
         {
             "id": 8,
             "nama_bug": "Sesi Login Kedaluwarsa (Bilingual ID)",
             "query_gejala": "token jwt expired menyebabkan error 401 unauthorized saat akses endpoint",
             "expected_tag": "#jwt-auth",
-            "baseline_retry_steps": 3,
         },
         {
             "id": 9,
             "nama_bug": "Konflik Cabang Migrasi (Bilingual ID)",
             "query_gejala": "gagal jalankan migrasi database alembic karena bentrok multiple heads",
             "expected_tag": "#alembic",
-            "baseline_retry_steps": 4,
         },
         {
             "id": 10,
             "nama_bug": "Port Redis Ditolak (Bilingual ID)",
             "query_gejala": "koneksi ke cache redis port 6379 connection refused pada container docker",
             "expected_tag": "#redis",
-            "baseline_retry_steps": 3,
         },
         {
             "id": 11,
             "nama_bug": "CORS Tag Lookup",
             "query_gejala": "#cors-policy #preflight-header",
             "expected_tag": "#cors-policy",
-            "baseline_retry_steps": 3,
         },
         {
             "id": 12,
             "nama_bug": "DB Pool Tag Lookup",
             "query_gejala": "#koneksi-db #pool-timeout",
             "expected_tag": "#koneksi-db",
-            "baseline_retry_steps": 4,
         },
         {
             "id": 13,
             "nama_bug": "JWT Auth Tag Lookup",
             "query_gejala": "#jwt-auth #token-expired",
             "expected_tag": "#jwt-auth",
-            "baseline_retry_steps": 3,
         },
         {
             "id": 14,
             "nama_bug": "Alembic Tag Lookup",
             "query_gejala": "#alembic #multiple-heads",
             "expected_tag": "#alembic",
-            "baseline_retry_steps": 3,
         },
         {
             "id": 15,
             "nama_bug": "Redis Tag Lookup",
             "query_gejala": "#redis #connection-refused",
             "expected_tag": "#redis",
-            "baseline_retry_steps": 3,
         },
     ]
 
-    # 10 Query Negatif / Out-of-Domain (Termasuk kasus nyata reviewer: "ruff No module named ruff")
+    # 10 Query Negatif / Out-of-Domain (Lintas ekosistem, CLI tool, dan error framework lain)
     query_out_of_domain = [
         "ruff No module named ruff",
         "python.exe: No module named pip",
@@ -808,8 +793,10 @@ def jalankan_skenario_3(db_path: str) -> dict[str, Any]:
         for kasus in kasus_uji_error:
             # 1. Ukur waktu aktual Baseline (Linear Raw-Log Scan pada korpus 250 log mentah)
             t0_base = time.perf_counter()
-            _baseline_linear_raw_log_scan(korpus_log_mentah, kasus["query_gejala"], top_k=3)
+            kandidat_base = _baseline_linear_raw_log_scan(korpus_log_mentah, kasus["query_gejala"], top_k=5)
             durasi_base_ms = (time.perf_counter() - t0_base) * 1000.0
+            # Hitung jumlah kandidat langkah inspeksi secara deterministik dari hasil linear scan
+            baseline_steps_aktual = max(3, len(kandidat_base))
 
             # 2. Ukur waktu aktual Karjimut FTS5 BM25 + Hybrid Search
             t0_mcp = time.perf_counter()
@@ -833,7 +820,7 @@ def jalankan_skenario_3(db_path: str) -> dict[str, Any]:
                         conn,
                         kode_proyek=kode_proyek,
                         jenis_aktivitas=AKTIVITAS_SEARCH_SOLUSI,
-                        token_mentah_setara=kasus["baseline_retry_steps"] * 180,
+                        token_mentah_setara=baseline_steps_aktual * 180,
                         token_aktual_terpakai=hitung_token(hasil_fts[0]["solusi_paten"]) + 20,
                     )
             else:
@@ -845,7 +832,7 @@ def jalankan_skenario_3(db_path: str) -> dict[str, Any]:
                 "no": kasus["id"],
                 "nama_bug": kasus["nama_bug"],
                 "query_input": kasus["query_gejala"][:45] + ("..." if len(kasus["query_gejala"]) > 45 else ""),
-                "baseline_steps": kasus["baseline_retry_steps"],
+                "baseline_steps": baseline_steps_aktual,
                 "baseline_time": f"{durasi_base_ms:.2f} ms",
                 "mcp_steps": 1,
                 "mcp_time": f"{durasi_mcp_ms:.2f} ms",
@@ -889,7 +876,7 @@ def jalankan_skenario_3(db_path: str) -> dict[str, Any]:
         "total_baris_arsip": total_baris_arsip,
         "duplikasi_baris": total_baris_arsip - 5,
         "rata2_baseline_steps": round(
-            sum(k["baseline_retry_steps"] for k in kasus_uji_error) / len(kasus_uji_error), 2
+            sum(h["baseline_steps"] for h in hasil_evaluasi_solusi) / len(hasil_evaluasi_solusi), 2
         ),
         "rata2_mcp_steps": 1.0,
     }
@@ -1111,7 +1098,7 @@ def ekspor_laporan_skripsi(res1: dict[str, Any], res2: dict[str, Any], res3: dic
    - **Recall@3 (Top-3 Accuracy):** **{res3['top3_akurasi_persen']}% ({res3['top3_berhasil']}/{res3['total_kasus']})**
    - **Mean Reciprocal Rank (MRR):** **{res3['mrr_score']}**
 2. **Ketahanan Terhadap False Positive pada $N={res3['total_query_negatif']}$ Query Negatif & Lintas Proyek:**
-   - **Out-of-Domain Rejection Rate (True Negative Rate):** **{res3['out_of_domain_rejection_persen']}% ({res3['ood_ditolak']}/{res3['total_query_negatif']} ditolak tepat, termasuk query `"ruff No module named ruff"`)**
+   - **Out-of-Domain Rejection Rate (True Negative Rate):** **{res3['out_of_domain_rejection_persen']}% ({res3['ood_ditolak']}/{res3['total_query_negatif']} query di luar domain ditolak tepat)**
    - **False Positive Rate (FPR):** **{res3['false_positive_rate_persen']}%**
 3. **Deduplikasi Deterministik Laci Arsip:** Terbukti **{res3['duplikasi_baris']} duplikasi baris** (tetap `{res3['total_baris_arsip']}` baris solusi master pada proyek uji).
 """
