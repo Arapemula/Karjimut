@@ -124,6 +124,7 @@ Karjimut/
 |-- README.md                       # Official product documentation & Quick Start
 |-- .cursorrules                    # Compact Vibecoder Rule (Cursor & Windsurf)
 |-- .agents/rules/sleep-mcp-auto.md # Compact Agent Bootstrap Rule (Antigravity / Gemini)
+|-- official-site/                  # Bilingual official landing page & design system spec
 |-- sleep-mcp/
     |-- pyproject.toml              # PyPI package configuration (karjimut)
     |-- src/                        # Core engine (MCP server, SQLite WAL + sqlite-vec, GUI)
